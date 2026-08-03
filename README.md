@@ -2,9 +2,9 @@
 
 An end-to-end Databricks data engineering and AI-serving project for
 Cricsheet-style cricket match data. It processes more than 22,000 JSON match
-files across multiple competitions, preserves the complete all-leagues
-dataset, and publishes a smaller, chatbot-oriented data product for IPL, Big
-Bash/WBBL, and The Hundred men's and women's competitions.
+files across every competition in the source archive, preserves the complete
+all-leagues dataset, and optionally publishes smaller chatbot-oriented serving
+tables for selected competitions.
 
 The project demonstrates:
 
@@ -63,7 +63,7 @@ flowchart LR
     bronze --> silver_all["All-leagues Silver"]
     silver_all --> gold_all["All-leagues Gold"]
 
-    bronze --> filter["Filter target competitions"]
+    bronze --> filter["Optional competition filter"]
     filter --> silver_focus["CricInsights Silver"]
     silver_focus --> gold_focus["CricInsights Gold"]
 
@@ -106,9 +106,9 @@ filtering and joins.
 | `cricket.cricket_all.silver_deliveries` | One row per delivery | Batter, bowler, non-striker, runs, extras, innings, over, and delivery context |
 | `cricket.cricket_all.silver_wickets` | One row per wicket event | Dismissed player, dismissal kind, fielders, player credited with the wicket, and delivery context |
 
-The same transformation code can target the focused schema by changing the
-schema and source parameters. This keeps all-leagues and focused processing
-consistent without duplicating parsing logic.
+The same transformation code can target the optional serving schema by
+changing the schema and source parameters. This keeps all-leagues and filtered
+processing consistent without duplicating parsing logic.
 
 ### Gold: business and AI serving facts
 
@@ -126,22 +126,23 @@ All-leagues analytical tables:
 | `cricket.cricket_all.gold_team_match_summary` | Team innings and match scoring summaries |
 | `cricket.cricket_all.gold_league_season_summary` | Competition and season rollups |
 
-Focused AI-serving tables:
+Optional AI-serving tables:
 
 | Table | Grain | Chatbot use |
 | --- | --- | --- |
 | `cricket.cricinsights_src2.gold_ai_match_facts` | One row per selected match | Match lookup, venue, teams, result, season, and competition questions |
 | `cricket.cricinsights_src2.gold_ai_player_cards` | Player and competition/season facts | Player comparisons, batting and bowling leaderboards, and profile answers |
 | `cricket.cricinsights_src2.gold_ai_team_season_cards` | Team, competition, gender, and season | Team form, scoring, wins, and season comparisons |
-| `cricket.cricinsights_src2.gold_ai_match_facts_focus_leagues` | One row per focused match | Fast access to IPL, Big Bash/WBBL, and The Hundred only |
+| `cricket.cricinsights_src2.gold_ai_match_facts_focus_leagues` | One row per focused match | Fast access to the configured competition set |
 | `cricket.cricinsights_src2.gold_ai_match_facts_other_leagues` | One row per other match | Separate access path for every non-focused competition |
-| `cricket.cricinsights_src2.gold_ai_player_cards_focus_leagues` | Focused player facts | Fast focused-league player questions |
-| `cricket.cricinsights_src2.gold_ai_player_cards_other_leagues` | Other-league player facts | Broad competition coverage outside the showcase set |
-| `cricket.cricinsights_src2.gold_ai_team_season_cards_focus_leagues` | Focused team-season facts | Fast focused-league team questions |
+| `cricket.cricinsights_src2.gold_ai_player_cards_focus_leagues` | Focused player facts | Fast questions for the configured competition set |
+| `cricket.cricinsights_src2.gold_ai_player_cards_other_leagues` | Other-league player facts | Broad competition coverage outside the configured set |
+| `cricket.cricinsights_src2.gold_ai_team_season_cards_focus_leagues` | Focused team-season facts | Fast team questions for the configured competition set |
 | `cricket.cricinsights_src2.gold_ai_team_season_cards_other_leagues` | Other-league team-season facts | Broad team and season discovery |
 
-The focused schema is the chatbot contract. The all-leagues schema remains the
-complete analytical source for future products and new competitions.
+The all-leagues schema is the primary source of truth. The optional serving
+schema is a smaller chatbot contract for applications that need predictable,
+low-latency access to a chosen set of competitions.
 
 ## Incremental Processing Design
 
@@ -157,7 +158,7 @@ reprocess the complete archive every time a new ZIP arrives.
 6. Parse only new match IDs into silver
 7. Detect affected competition-season partitions
 8. Refresh only affected gold partitions
-9. Update focused and other-league serving tables
+9. Update optional filtered and other-league serving tables
 10. Record counts and send the run summary
 ```
 
@@ -166,20 +167,17 @@ prevents duplicate records when a job is retried or the same archive is
 uploaded again. New data is appended, while affected analytical partitions are
 refreshed so corrected or late-arriving matches can be represented correctly.
 
-## League Routing
+## All-Leagues Coverage
 
-The focused target list includes:
+The primary pipeline retains every league, format, gender, season, venue, team,
+player, match, delivery, and wicket available in the source archive. No league
+is discarded from the all-leagues schema because of the optional AI filter.
 
-- Indian Premier League
-- Big Bash League
-- Women's Big Bash League
-- The Hundred Men's Competition
-- The Hundred Women's Competition
-
-The pipeline preserves both men's and women's competitions where they occur
-in the source. It also retains every other league in the all-leagues schema and
-publishes those records into separate `_other_leagues` serving tables. This
-gives the chatbot a fast focused path without losing the wider archive.
+The `target_leagues` bundle variable controls the optional filtered serving
+path. It can be configured for an IPL-only chatbot, a broader competition set,
+or any other valid event names in the source data. The `_other_leagues` tables
+retain the records outside that configured set, so the complete archive remains
+available for analysis.
 
 ## Jobs and Orchestration
 
@@ -189,16 +187,17 @@ gives the chatbot a fast focused path without losing the wider archive.
 layers. It is useful for an initial load, a full rebuild, or validation after a
 major transformation change.
 
-### Focused AI showcase job
+### Optional AI showcase job
 
 `cricket_showcase_ai_lakehouse_job` reuses the all-leagues bronze table and
-rebuilds only the selected competitions in the showcase schema. It is useful
-for a clean focused refresh and for demonstrating the chatbot data product.
+rebuilds only the competitions configured in `target_leagues` in the serving
+schema. It is useful for a chatbot proof of concept, such as an IPL-only
+assistant, without changing the complete all-leagues foundation.
 
 ### Production incremental ZIP job
 
 `cricket_incremental_zip_pipeline_job` is the operational job. It coordinates
-extraction, manifests, bronze ingestion, all-leagues silver/gold, focused
+extraction, manifests, all-leagues bronze/silver/gold, optional filtered
 silver/gold, league segmentation, and notification tasks.
 
 The notification task runs with `ALL_DONE`, so a failed upstream task can still
@@ -236,9 +235,9 @@ explanation is required.
 Example questions:
 
 - Who scored the most runs in the IPL by season?
-- Compare average team scores in the Big Bash and Women's Big Bash.
-- Which players have the best batting strike rate in The Hundred women's competition?
-- Which bowlers have the best economy rate in the Big Bash by season?
+- Which players have the best batting strike rate in a selected competition?
+- Which bowlers have the best economy rate by league and season?
+- How does average team scoring vary across competitions?
 - Show all matches played by a team at a specific venue.
 - Explain the wickets in a specific innings from delivery-level facts.
 
@@ -268,21 +267,22 @@ Recommended tool surface:
 
 ## Validated Data Scale
 
-One validated showcase run processed the following approximate scale. Counts
-will grow as new source files arrive:
+One validated run processed the following approximate scale. Counts will grow as
+new source files arrive:
 
 | Dataset | Example count |
 | --- | ---: |
 | Source JSON files | 22,228 |
-| Focused matches | 2,746 |
-| Focused deliveries | 630,035 |
-| Focused wicket events | 32,868 |
-| Focused AI player cards | 7,820 |
-| Focused AI team-season cards | 454 |
-| Focused AI match facts | 2,746 |
+| Selected showcase matches | 2,746 |
+| Selected showcase deliveries | 630,035 |
+| Selected showcase wicket events | 32,868 |
+| Selected showcase AI player cards | 7,820 |
+| Selected showcase AI team-season cards | 454 |
+| Selected showcase AI match facts | 2,746 |
 
-The same pipeline also makes the full archive available through the all-leagues
-tables and publishes separate other-league serving tables for chatbot access.
+The complete archive remains available through the all-leagues tables, while the
+optional serving path publishes separate filtered and other-league tables for
+chatbot access.
 
 ## Security and Configuration
 
@@ -351,7 +351,7 @@ Run the incremental ZIP pipeline:
 databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile jagadeeswaran
 ```
 
-Run the focused showcase job:
+Run the optional AI showcase job:
 
 ```powershell
 databricks bundle run cricket_showcase_ai_lakehouse_job -t dev --profile jagadeeswaran
@@ -396,5 +396,5 @@ Natural next steps include:
   tools.
 
 Detailed operational documentation is available in
-`docs/incremental_zip_pipeline.md`, and the focused data product is described
+`docs/incremental_zip_pipeline.md`, and the optional AI data product is described
 in `docs/notion_cricket_showcase_lakehouse.md`.
