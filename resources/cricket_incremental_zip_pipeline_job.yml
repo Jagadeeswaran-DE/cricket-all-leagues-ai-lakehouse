@@ -1,0 +1,228 @@
+resources:
+  jobs:
+    cricket_incremental_zip_pipeline_job:
+      name: cricket-incremental-zip-pipeline-${bundle.target}
+      performance_target: STANDARD
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies: []
+
+      tasks:
+        - task_key: extract_new_zip_files
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/bronze/extract_new_zip_files.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.schema}
+              - --zip-source-path
+              - ${var.zip_source_path}
+              - --extract-output-path
+              - ${var.extract_output_path}
+              - --run-id
+              - "{{job.run_id}}"
+
+        - task_key: bronze_ingest_raw_matches
+          depends_on:
+            - task_key: extract_new_zip_files
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/bronze/ingest_raw_matches.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.schema}
+              - --table-prefix
+              - ""
+              - --source-path
+              - ${var.source_path}
+              - --run-id
+              - "{{job.run_id}}"
+              - --incremental
+              - "true"
+
+        - task_key: all_silver_build_matches
+          depends_on:
+            - task_key: bronze_ingest_raw_matches
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/silver/build_matches.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.schema}
+              - --table-prefix
+              - ""
+              - --run-id
+              - "{{job.run_id}}"
+              - --incremental
+              - "true"
+
+        - task_key: all_silver_build_deliveries
+          depends_on:
+            - task_key: bronze_ingest_raw_matches
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/silver/build_deliveries.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.schema}
+              - --table-prefix
+              - ""
+              - --run-id
+              - "{{job.run_id}}"
+              - --incremental
+              - "true"
+
+        - task_key: all_gold_build_analytics
+          depends_on:
+            - task_key: all_silver_build_matches
+            - task_key: all_silver_build_deliveries
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/gold/build_analytics.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.schema}
+              - --table-prefix
+              - ""
+              - --run-id
+              - "{{job.run_id}}"
+              - --incremental
+              - "true"
+
+        - task_key: cricinsights_silver_build_matches
+          depends_on:
+            - task_key: bronze_ingest_raw_matches
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/silver/build_matches.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.showcase_schema}
+              - --table-prefix
+              - ""
+              - --bronze-schema
+              - ${var.schema}
+              - --bronze-table-prefix
+              - ""
+              - --target-leagues
+              - ${var.target_leagues}
+              - --run-id
+              - "{{job.run_id}}"
+              - --incremental
+              - "true"
+
+        - task_key: cricinsights_silver_build_deliveries
+          depends_on:
+            - task_key: bronze_ingest_raw_matches
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/silver/build_deliveries.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.showcase_schema}
+              - --table-prefix
+              - ""
+              - --bronze-schema
+              - ${var.schema}
+              - --bronze-table-prefix
+              - ""
+              - --target-leagues
+              - ${var.target_leagues}
+              - --run-id
+              - "{{job.run_id}}"
+              - --incremental
+              - "true"
+
+        - task_key: cricinsights_gold_build_analytics
+          depends_on:
+            - task_key: cricinsights_silver_build_matches
+            - task_key: cricinsights_silver_build_deliveries
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/gold/build_analytics.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.showcase_schema}
+              - --table-prefix
+              - ""
+              - --run-id
+              - "{{job.run_id}}"
+              - --incremental
+              - "true"
+
+        - task_key: build_league_segment_tables
+          depends_on:
+            - task_key: all_gold_build_analytics
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/gold/build_league_segments.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --source-schema
+              - ${var.schema}
+              - --target-schema
+              - ${var.showcase_schema}
+              - --target-leagues
+              - ${var.target_leagues}
+
+        - task_key: notify_run_summary
+          depends_on:
+            - task_key: cricinsights_gold_build_analytics
+            - task_key: build_league_segment_tables
+          run_if: ALL_DONE
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/common/notify_run_summary.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --all-schema
+              - ${var.schema}
+              - --showcase-schema
+              - ${var.showcase_schema}
+              - --run-id
+              - "{{job.run_id}}"
+              - --pipeline-name
+              - cricket_incremental_zip_pipeline
+              - --email-enabled
+              - ${var.summary_email_enabled}
+              - --email-to
+              - ${var.summary_email_to}
+              - --email-from
+              - ${var.summary_email_from}
+              - --smtp-host
+              - ${var.smtp_host}
+              - --smtp-port
+              - ${var.smtp_port}
+              - --smtp-user
+              - ${var.smtp_user}
+              - --smtp-password-secret-scope
+              - ${var.smtp_password_secret_scope}
+              - --smtp-password-secret-key
+              - ${var.smtp_password_secret_key}
+              - --google-chat-enabled
+              - ${var.google_chat_enabled}
+              - --google-chat-webhook-secret-scope
+              - ${var.google_chat_webhook_secret_scope}
+              - --google-chat-webhook-secret-key
+              - ${var.google_chat_webhook_secret_key}

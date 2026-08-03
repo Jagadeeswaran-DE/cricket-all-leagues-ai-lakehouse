@@ -1,0 +1,90 @@
+bundle:
+  name: cricket_all_leagues_ai_lakehouse
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog for cricket lakehouse tables.
+    default: cricket
+
+  schema:
+    description: Unity Catalog schema for cricket lakehouse tables.
+    default: cricket_all
+
+  showcase_schema:
+    description: Unity Catalog schema for the focused AI showcase tables.
+    default: cricinsights_src2
+
+  source_path:
+    description: Raw Cricsheet-style JSON files in a Unity Catalog volume.
+    default: /Volumes/cricket/cricket_all/cricket_all_raw/extracted/*.json
+
+  zip_source_path:
+    description: ZIP landing path in a Unity Catalog volume.
+    default: /Volumes/cricket/cricket_all/cricket_all_raw/zips/*.zip
+
+  extract_output_path:
+    description: Extracted JSON output directory in a Unity Catalog volume.
+    default: /Volumes/cricket/cricket_all/cricket_all_raw/extracted
+
+  table_prefix:
+    description: Optional prefix for output table names, useful for smoke tests.
+    default: ""
+
+  target_leagues:
+    description: Comma-separated Cricsheet event names for the focused AI showcase.
+    default: "Indian Premier League,Big Bash League,Women's Big Bash League,The Hundred Men's Competition,The Hundred Women's Competition"
+
+  summary_email_enabled:
+    description: Set to true after SMTP secrets are configured.
+    default: "false"
+
+  summary_email_to:
+    description: Comma-separated email recipients for pipeline summaries.
+    default: ""
+
+  summary_email_from:
+    description: Sender email address for pipeline summaries.
+    default: ""
+
+  smtp_host:
+    description: SMTP host for detailed pipeline summary emails.
+    default: ""
+
+  smtp_port:
+    description: SMTP TLS port.
+    default: "587"
+
+  smtp_user:
+    description: SMTP username.
+    default: ""
+
+  smtp_password_secret_scope:
+    description: Databricks secret scope containing the SMTP password.
+    default: ""
+
+  smtp_password_secret_key:
+    description: Databricks secret key containing the SMTP password.
+    default: ""
+
+  google_chat_enabled:
+    description: Set to true after the Google Chat webhook secret is configured.
+    default: "false"
+
+  google_chat_webhook_secret_scope:
+    description: Databricks secret scope containing the Google Chat webhook URL.
+    default: ""
+
+  google_chat_webhook_secret_key:
+    description: Databricks secret key containing the Google Chat webhook URL.
+    default: ""
+
+targets:
+  dev:
+    default: true
+    mode: development
+    workspace:
+      profile: jagadeeswaran
+      root_path: /Workspace/Users/${workspace.current_user.userName}/bundles/${bundle.name}/${bundle.target}

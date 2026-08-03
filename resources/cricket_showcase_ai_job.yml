@@ -1,0 +1,63 @@
+resources:
+  jobs:
+    cricket_showcase_ai_lakehouse_job:
+      name: cricket-showcase-ai-lakehouse-${bundle.target}
+      performance_target: STANDARD
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies: []
+
+      tasks:
+        - task_key: silver_build_matches
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/silver/build_matches.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.showcase_schema}
+              - --table-prefix
+              - ""
+              - --bronze-schema
+              - ${var.schema}
+              - --bronze-table-prefix
+              - ""
+              - --target-leagues
+              - ${var.target_leagues}
+
+        - task_key: silver_build_deliveries
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/silver/build_deliveries.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.showcase_schema}
+              - --table-prefix
+              - ""
+              - --bronze-schema
+              - ${var.schema}
+              - --bronze-table-prefix
+              - ""
+              - --target-leagues
+              - ${var.target_leagues}
+
+        - task_key: gold_build_analytics
+          depends_on:
+            - task_key: silver_build_matches
+            - task_key: silver_build_deliveries
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/gold/build_analytics.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.showcase_schema}
+              - --table-prefix
+              - ""
