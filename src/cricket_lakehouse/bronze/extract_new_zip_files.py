@@ -75,9 +75,11 @@ def main() -> None:
         started = datetime.now(UTC)
         checksum = sha256_file(zip_path)
         if checksum in processed_hashes:
+            print(f"Skipping already processed ZIP: {zip_path}", flush=True)
             zip_rows.append((args.run_id, zip_path, os.path.basename(zip_path), stat.st_size, modified, checksum, None, args.run_id, "skipped_already_processed", started, started, 0, 0, 0, None, None, started, started, 0, started))
             continue
 
+        print(f"Extracting ZIP: {zip_path} ({stat.st_size:,} bytes)", flush=True)
         json_count = register_count = invalid_count = 0
         temp_dir = tempfile.mkdtemp(prefix="cricket_extract_", dir=args.extract_output_path)
         try:
@@ -105,8 +107,12 @@ def main() -> None:
                         file_rows.append((checksum, zip_path, relative, final_path, os.path.basename(final_name), extension, member.file_size, member.CRC, file_hash, match_candidate, file_hash, "extracted", "pending", args.run_id, started, datetime.now(UTC), args.run_id, match_candidate, "extracted", datetime.now(UTC), None, None))
                         json_count += extension == ".json"
                         register_count += extension == ".csv"
+                        if (json_count + register_count) % 1000 == 0:
+                            print(f"  extracted {json_count:,} JSON and {register_count:,} register files", flush=True)
             completed = datetime.now(UTC)
             zip_rows.append((args.run_id, zip_path, os.path.basename(zip_path), stat.st_size, modified, checksum, None, args.run_id, "dry_run" if args.dry_run.lower() == "true" else "extracted", started, completed, json_count, register_count, invalid_count, None, None, started, completed, json_count, completed))
+            processed_hashes.add(checksum)
+            print(f"Completed ZIP: {zip_path} ({json_count:,} JSON, {register_count:,} register files)", flush=True)
         except (OSError, RuntimeError, zipfile.BadZipFile, ValueError) as error:
             failed += 1
             completed = datetime.now(UTC)
