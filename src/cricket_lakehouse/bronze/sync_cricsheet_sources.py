@@ -78,8 +78,8 @@ def main() -> None:
     sources = json.loads(args.sources_json)
     if args.run_mode == "incremental":
         # Incremental runs consume user-landed ZIPs from /zips/. The complete
-        # archive is reserved for an explicit bootstrap to avoid re-downloading
-        # tens of thousands of matches on every file-arrival event.
+        # archive is reserved for daily/bootstrap runs to avoid re-downloading
+        # tens of thousands of matches on every manual incremental run.
         sources = [source for source in sources if source.get("source_type") != "match_archive"]
     source_rows = []
     failures = 0

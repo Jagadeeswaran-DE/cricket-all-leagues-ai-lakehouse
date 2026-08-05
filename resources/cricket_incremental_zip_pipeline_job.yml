@@ -7,11 +7,10 @@ resources:
       queue:
         enabled: true
 
-      trigger:
-        file_arrival:
-          url: ${var.zip_arrival_trigger_path}
-          min_time_between_triggers_seconds: 60
-          wait_after_last_change_seconds: 60
+      schedule:
+        quartz_cron_expression: "0 0 10 * * ?"
+        timezone_id: Asia/Kolkata
+        pause_status: UNPAUSED
 
       environments:
         - environment_key: default

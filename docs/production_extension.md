@@ -9,8 +9,8 @@ competing full-load job.
 The system turns Cricsheet JSON archives into an auditable, chatbot-ready
 lakehouse:
 
-1. A file-arrival event or explicit bootstrap starts the one Databricks job.
-2. Source acquisition records the official archive and register files.
+1. The daily schedule or an explicit bootstrap starts the one Databricks job.
+2. Source acquisition checks and downloads changed official archive/register files.
 3. ZIP extraction is checksum-aware, staged, atomic, and traversal-safe.
 4. Bronze keeps the original JSON plus source lineage and revision history.
 5. Silver parses matches, deliveries, wickets, teams, venues, competitions, and
@@ -40,7 +40,7 @@ flowchart LR
 
 ## Storage Layout
 
-The existing trigger path remains `/Volumes/cricket/cricket_all/cricket_all_raw/zips/`.
+The existing landing path remains `/Volumes/cricket/cricket_all/cricket_all_raw/zips/`.
 The bootstrap/source-sync code also creates:
 
 ```text
@@ -72,13 +72,11 @@ Validate source discovery without writing extracted data:
 databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile jagadeeswaran --var dry_run=true
 ```
 
-Normal file-arrival processing uses `run_mode=incremental`. It skips the full
-official archive download, consumes newly landed ZIPs, and processes only new
-or changed ZIP members and match revisions.
-
-Development mode can pause automatic triggers after a deploy. Verify the job
-trigger in the workspace or unpause it with the Databricks UI/CLI. Production
-should use a non-development target with the file-arrival trigger enabled.
+The deployed daily schedule uses `run_mode=daily` and runs at 10:00
+Asia/Kolkata. It checks the official archive and register sources, downloads
+only changed files, and then processes uploaded or downloaded ZIPs. Manual
+`run_mode=incremental` runs skip the full archive download and consume only
+landed ZIPs.
 
 ## Task Graph
 

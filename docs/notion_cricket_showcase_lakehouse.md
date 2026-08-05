@@ -74,7 +74,7 @@ Deploy:
 databricks bundle deploy -t dev --profile jagadeeswaran
 ```
 
-Run the main incremental pipeline, which now includes the optional serving
+Run the main daily pipeline, which now includes the optional serving
 layer:
 
 ```powershell

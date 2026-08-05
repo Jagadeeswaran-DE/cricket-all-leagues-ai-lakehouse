@@ -47,27 +47,18 @@ cricket.cricinsights_src2.gold_ai_team_season_cards_other_leagues
 databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile jagadeeswaran
 ```
 
-## Automatic File-Arrival Trigger
+## Daily Schedule and Source Download
 
-The bundle configures the incremental job to monitor the directory below:
+The bundle runs the job daily at 10:00 Asia/Kolkata and checks the official
+Cricsheet sources before processing the landing directory below:
 
 ```text
 /Volumes/cricket/cricket_all/cricket_all_raw/zips/
 ```
 
-The trigger does not use a wildcard. It waits 60 seconds after the last file
-change and enforces a 60-second minimum interval between trigger events. This
-debounces batches of ZIP uploads into one pipeline run.
-
-Databricks file-arrival triggers respond to new files. Overwriting an existing
-filename does not create a new arrival event, so use a new ZIP filename or run
-the job manually when replacing an archive.
-
-The `dev` bundle target uses development mode, which pauses automatic triggers
-when the bundle is deployed. After deployment, open the job's **Schedules &
-Triggers** settings and set the file-arrival trigger to **Unpaused**. For a
-long-lived production setup, deploy a production-mode target so the trigger is
-not paused by development-mode defaults.
+The job downloads the official `all_json.zip`, `people.csv`, and `names.csv`
+into the Volume when their source metadata changes. Unchanged sources are
+skipped. ZIPs uploaded by users to the same root are processed by the same run.
 
 ## Task Flow
 

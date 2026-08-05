@@ -173,24 +173,20 @@ prevents duplicate records when a job is retried or the same archive is
 uploaded again. New data is appended, while affected analytical partitions are
 refreshed so corrected or late-arriving matches can be represented correctly.
 
-### Automatic file-arrival trigger
+### Daily source synchronization
 
-The incremental job monitors the ZIP landing directory:
+The main job runs daily at 10:00 Asia/Kolkata. It checks the official
+Cricsheet archive and register files, downloads only changed sources, and
+places them in the Volume before extraction:
 
 ```text
 /Volumes/cricket/cricket_all/cricket_all_raw/zips/
 ```
 
-It waits 60 seconds after the last file change before starting and limits
-trigger events to one per minute. This allows a batch of uploaded ZIPs to settle
-before one pipeline run processes them together.
-
-The trigger responds to new files, not an overwrite of an existing filename.
-Use a new ZIP name for a new arrival, or run the job manually when replacing an
-existing archive. The current `dev` bundle target pauses automatic triggers
-during deployment, so the trigger must be unpaused in the job's Schedules &
-Triggers settings after a dev deployment. A production-mode target can keep the
-trigger enabled across deployments.
+The downloaded archive is written under `zips/historical/` and register files
+under `zips/register/`. ETag/Last-Modified metadata and the source manifest
+prevent unchanged sources from being downloaded again. User-uploaded ZIPs in
+the same landing root are also processed by the same run.
 
 ## All-Leagues Coverage
 
@@ -206,14 +202,14 @@ available for analysis.
 
 ## Jobs and Orchestration
 
-### Main incremental ZIP job
+### Main daily ZIP job
 
 `cricket_incremental_zip_pipeline_job` is the operational job. It coordinates
 extraction, manifests, all-leagues bronze/silver/gold, optional filtered
 silver/gold, league segmentation, and notification tasks.
 
-New ZIP uploads trigger this job automatically after the configured quiet
-period when its file-arrival trigger is unpaused.
+The job is scheduled with Quartz expression `0 0 10 * * ?` in the
+`Asia/Kolkata` timezone.
 
 The same job supports an explicit bootstrap and a dry run:
 
@@ -224,8 +220,9 @@ databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile jaga
 
 Bootstrap creates operational tables and source directories, downloads the
 official archive/register sources, and builds the same Bronze/Silver/Gold path.
-Incremental mode skips the full archive refresh and consumes only newly landed
-or revised input.
+Daily mode checks the official archive/register sources and downloads only
+changed files. Incremental mode skips the full archive refresh and consumes
+only newly landed or revised input.
 
 The notification task runs with `ALL_DONE`, so a failed upstream task can still
 produce an operational summary describing what completed and what failed.
@@ -366,7 +363,7 @@ Deploy it:
 databricks bundle deploy -t dev --profile jagadeeswaran
 ```
 
-Run the incremental ZIP pipeline:
+Run the daily ZIP pipeline manually:
 
 ```powershell
 databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile jagadeeswaran

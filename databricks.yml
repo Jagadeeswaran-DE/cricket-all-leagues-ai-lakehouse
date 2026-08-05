@@ -30,7 +30,7 @@ variables:
     default: /Volumes/cricket/cricket_all/cricket_all_raw/zips/**/*.zip
 
   zip_arrival_trigger_path:
-    description: Directory monitored for new ZIP arrivals.
+    description: Legacy landing-root variable retained for compatibility; the production job uses a daily schedule.
     default: /Volumes/cricket/cricket_all/cricket_all_raw/zips/
 
   extract_output_path:
@@ -46,8 +46,8 @@ variables:
     default: /Volumes/cricket/cricket_all/cricket_all_raw/checkpoints
 
   run_mode:
-    description: Pipeline execution mode; incremental is trigger-safe, bootstrap performs a first load.
-    default: incremental
+    description: Pipeline execution mode; daily syncs official sources, incremental consumes landed ZIPs, bootstrap performs a first load.
+    default: daily
 
   dry_run:
     description: Validate source discovery and manifests without writing extracted data.

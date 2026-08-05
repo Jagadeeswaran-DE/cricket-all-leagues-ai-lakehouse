@@ -10,7 +10,7 @@ production data automatically.
 1. Deploy with `dry_run=true` and inspect source manifests.
 2. Run `bootstrap` only for an empty environment or an approved full refresh.
 3. Run incremental mode and inspect DQ/audit results.
-4. Enable the production file-arrival trigger after the first successful run.
+4. Keep the production daily schedule enabled after the first successful run.
 5. Retire obsolete tables only after dependency checks and sign-off.
 
 ## Commented cleanup SQL
