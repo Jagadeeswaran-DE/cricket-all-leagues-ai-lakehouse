@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
+  <title id="title">Animated cricket lakehouse pipeline</title>
+  <desc id="desc">Source files flow through Bronze, Silver, Gold, and AI serving layers.</desc>
+  <style>
+    .background { fill: #0b2026; }
+    .label { fill: #f9f7f4; font: 600 18px Arial, sans-serif; text-anchor: middle; }
+    .sub { fill: #c9d4d5; font: 13px Arial, sans-serif; text-anchor: middle; }
+    .node { fill: #12343c; stroke: #ff3621; stroke-width: 2; }
+    .line { fill: none; stroke: #7d9698; stroke-width: 3; stroke-linecap: round; }
+    .dot { fill: #ff3621; }
+    .pulse { animation: pulse 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+    .pulse:nth-of-type(2) { animation-delay: .4s; }
+    .pulse:nth-of-type(3) { animation-delay: .8s; }
+    .pulse:nth-of-type(4) { animation-delay: 1.2s; }
+    .pulse:nth-of-type(5) { animation-delay: 1.6s; }
+    @keyframes pulse { 0%, 100% { opacity: .65; } 50% { opacity: 1; } }
+  </style>
+  <rect class="background" width="1200" height="300" rx="16" />
+  <path class="line" d="M210 150 H270 M430 150 H490 M650 150 H710 M870 150 H930" />
+  <g class="pulse">
+    <rect class="node" x="40" y="105" width="170" height="90" rx="10" />
+    <text class="label" x="125" y="143">Source Sync</text>
+    <text class="sub" x="125" y="168">Cricsheet + ZIPs</text>
+  </g>
+  <g class="pulse">
+    <rect class="node" x="270" y="105" width="160" height="90" rx="10" />
+    <text class="label" x="350" y="143">Bronze</text>
+    <text class="sub" x="350" y="168">Raw + lineage</text>
+  </g>
+  <g class="pulse">
+    <rect class="node" x="490" y="105" width="160" height="90" rx="10" />
+    <text class="label" x="570" y="143">Silver</text>
+    <text class="sub" x="570" y="168">Match facts</text>
+  </g>
+  <g class="pulse">
+    <rect class="node" x="710" y="105" width="160" height="90" rx="10" />
+    <text class="label" x="790" y="143">Gold</text>
+    <text class="sub" x="790" y="168">Analytics</text>
+  </g>
+  <g class="pulse">
+    <rect class="node" x="930" y="105" width="220" height="90" rx="10" />
+    <text class="label" x="1040" y="143">AI Serving</text>
+    <text class="sub" x="1040" y="168">Chatbot-ready tables</text>
+  </g>
+  <circle class="dot">
+    <animateMotion dur="4s" repeatCount="indefinite" path="M210 150 H270 M430 150 H490 M650 150 H710 M870 150 H930" />
+  </circle>
+  <circle class="dot">
+    <animateMotion dur="4s" begin="1.33s" repeatCount="indefinite" path="M210 150 H270 M430 150 H490 M650 150 H710 M870 150 H930" />
+  </circle>
+  <circle class="dot">
+    <animateMotion dur="4s" begin="2.66s" repeatCount="indefinite" path="M210 150 H270 M430 150 H490 M650 150 H710 M870 150 H930" />
+  </circle>
+</svg>

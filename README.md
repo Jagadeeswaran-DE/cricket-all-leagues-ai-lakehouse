@@ -1,5 +1,17 @@
 # Cricket All-Leagues AI Lakehouse
 
+<p align="center">
+  <a href="https://www.databricks.com/" title="Databricks Lakehouse Platform">
+    <img src="https://www.databricks.com/favicon.ico" alt="Databricks logo" width="88" />
+  </a>
+</p>
+
+<p align="center"><strong>Built on the Databricks Lakehouse Platform</strong></p>
+
+<p align="center">
+  <img src="docs/assets/lakehouse-pipeline.svg" alt="Animated source to AI serving lakehouse pipeline" width="100%" />
+</p>
+
 An end-to-end Databricks data engineering and AI-serving project for
 Cricsheet-style cricket match data. It processes more than 22,000 JSON match
 files across every competition in the source archive, preserves the complete
