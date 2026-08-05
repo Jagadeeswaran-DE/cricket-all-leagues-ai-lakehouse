@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://www.databricks.com/" title="Databricks Lakehouse Platform">
-    <img src="https://www.databricks.com/favicon.ico" alt="Databricks logo" width="88" />
+    <img src="docs/assets/databricks-logo.svg" alt="Databricks logo" width="180" />
   </a>
 </p>
 
