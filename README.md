@@ -98,20 +98,64 @@ flowchart LR
     audit --> notify["Google Chat or SMTP summary"]
 ```
 
-## Animated Data Lineage
+## One Sample Run: JSON to Google Chat
 
-The lineage below follows one source record from acquisition to chatbot serving.
-The same path applies to any competition because the league is detected from
-parsed match metadata, normalized in Silver, and routed into the configured
-focus or other-league serving table.
+This example shows how one match delivery is transformed. The same process
+works for any league because the pipeline reads `info.event.name` from the JSON
+instead of trusting the ZIP filename.
 
 <p align="center">
-  <img src="docs/assets/data-lineage.svg" alt="Animated data lineage from Cricsheet and uploaded ZIPs through Bronze, Silver, Gold, and AI serving" width="100%" />
+  <img src="docs/assets/sample-run.svg" alt="Animated sample JSON transformation from Bronze through Silver and Gold to a Google Chat alert" width="100%" />
 </p>
 
-No GitHub plugin or external animation service is required. The visual is a
-repository-local animated SVG, so it travels with the project and renders from
-the README without another account or configuration step.
+### Input JSON
+
+```json
+{
+  "meta": {"data_version": "1.1.0"},
+  "info": {
+    "dates": ["2024-04-01"],
+    "event": {"name": "Indian Premier League", "match_number": 1},
+    "teams": ["Royal Challengers Bengaluru", "Chennai Super Kings"]
+  },
+  "innings": [{
+    "team": "Royal Challengers Bengaluru",
+    "overs": [{
+      "over": 0,
+      "deliveries": [{
+        "batter": "V Kohli",
+        "bowler": "M Theekshana",
+        "runs": {"batter": 1, "total": 1}
+      }]
+    }]
+  }]
+}
+```
+
+### Transformations
+
+| Stage | Example output | Why it exists |
+| --- | --- | --- |
+| Bronze | `match_id=829765`, raw JSON, source SHA256, run ID | Replayable source of truth |
+| Silver | `innings_number=1`, `over_number=0`, `delivery_sequence=1`, `legal_ball=true` | Queryable ball-by-ball facts |
+| Gold | `league=IPL`, `total_runs=173`, `top_scorer=V Kohli` | Reusable analytics and AI facts |
+| AI serving | `gold_ai_match_facts_focus_leagues` | Fast chatbot retrieval |
+
+### Google Chat alert
+
+After the downstream tasks finish, `notify_run_summary.py` writes the same
+summary to `pipeline_run_summaries` and sends this JSON payload to the webhook:
+
+```json
+{
+  "text": "Pipeline: cricket_incremental_zip_pipeline\n\nNew data processed:\n- ZIP files extracted: 1\n- JSON files extracted: 1\n- New bronze matches inserted: 1\n\n table_name | new_count | old_count | total_count\n silver_matches | 1 | 22000 | 22001\n gold_ai_match_facts | 1 | 22000 | 22001"
+}
+```
+
+The webhook URL is read from a Databricks Secret. It is never stored in this
+repository. Enable `google_chat_enabled` and configure the secret scope/key to
+send the alert; no additional GitHub animation plugin is required because the
+visual is a repository-local animated SVG.
 
 ## Medallion Layers
 

@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 620" role="img" aria-labelledby="title desc">
+  <title id="title">Animated sample match transformation and Google Chat alert</title>
+  <desc id="desc">A sample IPL delivery moves from Cricsheet JSON through Bronze, Silver, Gold, and a Google Chat webhook alert.</desc>
+  <style>
+    .background { fill: #0b2026; }
+    .panel { fill: #102d34; stroke: #ff3621; stroke-width: 2; }
+    .arrow { fill: none; stroke: #7d9698; stroke-width: 3; stroke-linecap: round; }
+    .title { fill: #f9f7f4; font: 700 20px Arial, sans-serif; }
+    .caption { fill: #ff8d80; font: 700 14px Arial, sans-serif; }
+    .code { fill: #d7e2e2; font: 13px 'Courier New', monospace; }
+    .muted { fill: #9eb2b4; font: 12px Arial, sans-serif; }
+    .dot { fill: #ff3621; }
+    .pulse { animation: pulse 2.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+    .pulse:nth-of-type(2) { animation-delay: .45s; }
+    .pulse:nth-of-type(3) { animation-delay: .9s; }
+    .pulse:nth-of-type(4) { animation-delay: 1.35s; }
+    .pulse:nth-of-type(5) { animation-delay: 1.8s; }
+    @keyframes pulse { 0%, 100% { opacity: .72; } 50% { opacity: 1; } }
+  </style>
+  <rect class="background" width="1600" height="620" rx="16" />
+  <text class="title" x="40" y="45">One delivery: source JSON → Delta facts → Google Chat summary</text>
+  <text class="muted" x="40" y="70">Sample match: 829765 · Competition: Indian Premier League · run_id: 1086619087268702</text>
+
+  <path class="arrow" d="M300 320 H330 M610 320 H640 M920 320 H950 M1230 320 H1260" />
+
+  <g class="pulse">
+    <rect class="panel" x="30" y="100" width="270" height="440" rx="12" />
+    <text class="caption" x="55" y="135">01 · RAW JSON INPUT</text>
+    <text class="code" x="55" y="175">
+      <tspan x="55" dy="0">"info": {</tspan>
+      <tspan x="70" dy="21">"event": {</tspan>
+      <tspan x="85" dy="21">"name": "IPL"</tspan>
+      <tspan x="70" dy="21">},</tspan>
+      <tspan x="70" dy="21">"teams": ["RCB",</tspan>
+      <tspan x="85" dy="21">"CSK"]</tspan>
+      <tspan x="55" dy="21">},</tspan>
+      <tspan x="55" dy="35">"innings": [{</tspan>
+      <tspan x="70" dy="21">"team": "RCB",</tspan>
+      <tspan x="70" dy="21">"deliveries": [{</tspan>
+      <tspan x="85" dy="21">"batter": "V Kohli",</tspan>
+      <tspan x="85" dy="21">"bowler": "M Theekshana",</tspan>
+      <tspan x="85" dy="21">"runs": {"batter": 1,</tspan>
+      <tspan x="100" dy="21">"total": 1}</tspan>
+      <tspan x="70" dy="21">}]</tspan>
+      <tspan x="55" dy="21">}]</tspan>
+    </text>
+    <text class="muted" x="55" y="505">source: all_json.zip</text>
+  </g>
+
+  <g class="pulse">
+    <rect class="panel" x="340" y="100" width="270" height="440" rx="12" />
+    <text class="caption" x="365" y="135">02 · BRONZE DELTA</text>
+    <text class="code" x="365" y="180">
+      <tspan x="365" dy="0">match_id: 829765</tspan>
+      <tspan x="365" dy="24">league: IPL</tspan>
+      <tspan x="365" dy="24">source_file: 829765.json</tspan>
+      <tspan x="365" dy="24">source_revision:</tspan>
+      <tspan x="365" dy="20">sha256:7af3...e19b</tspan>
+      <tspan x="365" dy="32">raw_json: retained</tspan>
+      <tspan x="365" dy="24">pipeline_run_id:</tspan>
+      <tspan x="365" dy="20">1086619087268702</tspan>
+    </text>
+    <text class="muted" x="365" y="505">replayable + auditable</text>
+  </g>
+
+  <g class="pulse">
+    <rect class="panel" x="650" y="100" width="270" height="440" rx="12" />
+    <text class="caption" x="675" y="135">03 · SILVER DELIVERY</text>
+    <text class="code" x="675" y="180">
+      <tspan x="675" dy="0">match_id: 829765</tspan>
+      <tspan x="675" dy="24">innings_number: 1</tspan>
+      <tspan x="675" dy="24">over_number: 0</tspan>
+      <tspan x="675" dy="24">delivery_sequence: 1</tspan>
+      <tspan x="675" dy="32">legal_ball: true</tspan>
+      <tspan x="675" dy="24">batter_runs: 1</tspan>
+      <tspan x="675" dy="24">bowler_conceded: 1</tspan>
+      <tspan x="675" dy="24">wicket: false</tspan>
+    </text>
+    <text class="muted" x="675" y="505">stable delivery key</text>
+  </g>
+
+  <g class="pulse">
+    <rect class="panel" x="960" y="100" width="270" height="440" rx="12" />
+    <text class="caption" x="985" y="135">04 · GOLD AI FACT</text>
+    <text class="code" x="985" y="180">
+      <tspan x="985" dy="0">table: gold_ai_match_facts</tspan>
+      <tspan x="985" dy="24">league: IPL</tspan>
+      <tspan x="985" dy="24">team: RCB</tspan>
+      <tspan x="985" dy="24">match_id: 829765</tspan>
+      <tspan x="985" dy="32">total_runs: 173</tspan>
+      <tspan x="985" dy="24">top_scorer: V Kohli</tspan>
+      <tspan x="985" dy="24">serving_bucket:</tspan>
+      <tspan x="985" dy="20">focus_leagues</tspan>
+    </text>
+    <text class="muted" x="985" y="505">chatbot query surface</text>
+  </g>
+
+  <g class="pulse">
+    <rect class="panel" x="1270" y="100" width="300" height="440" rx="12" />
+    <text class="caption" x="1295" y="135">05 · GOOGLE CHAT POST</text>
+    <text class="code" x="1295" y="180">
+      <tspan x="1295" dy="0">POST webhook_url</tspan>
+      <tspan x="1295" dy="28">{</tspan>
+      <tspan x="1310" dy="21">"text": "Pipeline: cricket...</tspan>
+      <tspan x="1310" dy="21">Status: completed</tspan>
+      <tspan x="1310" dy="21">ZIPs: 1 | JSON: 1</tspan>
+      <tspan x="1310" dy="30">table_name | new | old | total</tspan>
+      <tspan x="1310" dy="21">silver_matches | 1 | 22000 | 22001</tspan>
+      <tspan x="1310" dy="21">gold_ai_facts | 1 | 22000 | 22001"</tspan>
+      <tspan x="1295" dy="21">}</tspan>
+    </text>
+    <text class="muted" x="1295" y="505">URL read from Databricks Secret</text>
+  </g>
+
+  <circle class="dot"><animateMotion dur="5s" repeatCount="indefinite" path="M300 320 H330 M610 320 H640 M920 320 H950 M1230 320 H1260" /></circle>
+  <circle class="dot"><animateMotion dur="5s" begin="1.65s" repeatCount="indefinite" path="M300 320 H330 M610 320 H640 M920 320 H950 M1230 320 H1260" /></circle>
+  <circle class="dot"><animateMotion dur="5s" begin="3.3s" repeatCount="indefinite" path="M300 320 H330 M610 320 H640 M920 320 H950 M1230 320 H1260" /></circle>
+</svg>
