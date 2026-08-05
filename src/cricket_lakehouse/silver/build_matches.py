@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, element_at, from_json, lit, sha2, when
+from pyspark.sql.functions import col, element_at, from_json, lit, lower, sha2, when
 
 MATCH_SCHEMA = """
 STRUCT<
@@ -72,12 +72,9 @@ def target_leagues(args: argparse.Namespace) -> list[str]:
 
 def league_group_expr() -> object:
     return (
-        when(col("league_name") == "Indian Premier League", lit("IPL"))
-        .when(col("league_name").isin("Big Bash League", "Women's Big Bash League"), lit("Big Bash"))
-        .when(
-            col("league_name").isin("The Hundred Men's Competition", "The Hundred Women's Competition"),
-            lit("The Hundred"),
-        )
+        when(lower(col("league_name")).contains("indian premier league"), lit("IPL"))
+        .when(lower(col("league_name")).contains("big bash"), lit("Big Bash"))
+        .when(lower(col("league_name")).contains("the hundred"), lit("The Hundred"))
         .otherwise(col("league_name"))
     )
 
@@ -136,12 +133,12 @@ def main() -> None:
     ).withColumn("league_group", league_group_expr()).dropDuplicates(["match_id"])
 
     target_table = table_name(args, "silver_matches")
-    if incremental and table_exists(spark, target_table):
-        existing_matches = spark.table(target_table).select("match_id").distinct()
-        matches = matches.join(existing_matches, ["match_id"], "left_anti")
-
     if matches.select("match_id").limit(1).count() == 0:
         return
+
+    if incremental and table_exists(spark, target_table):
+        matches.createOrReplaceTempView("cricket_silver_match_batch")
+        spark.sql(f"DELETE FROM {target_table} WHERE EXISTS (SELECT 1 FROM cricket_silver_match_batch b WHERE {target_table}.match_id = b.match_id)")
 
     write_mode = "append" if incremental else "overwrite"
     writer = matches.write.format("delta").mode(write_mode)

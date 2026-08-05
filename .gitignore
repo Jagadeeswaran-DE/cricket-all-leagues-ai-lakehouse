@@ -14,3 +14,4 @@ build/
 !.env.example
 *.log
 .tmp_*.json
+tmp/

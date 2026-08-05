@@ -3,6 +3,9 @@ resources:
     cricket_incremental_zip_pipeline_job:
       name: cricket-incremental-zip-pipeline-${bundle.target}
       performance_target: STANDARD
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
 
       trigger:
         file_arrival:
@@ -17,7 +20,49 @@ resources:
             dependencies: []
 
       tasks:
+        - task_key: initialize_run
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/bronze/initialize_run.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.schema}
+              - --serving-schema
+              - ${var.showcase_schema}
+              - --raw-volume-path
+              - ${var.raw_volume_path}
+              - --run-id
+              - "{{job.run_id}}"
+              - --run-mode
+              - ${var.run_mode}
+              - --dry-run
+              - ${var.dry_run}
+
+        - task_key: sync_cricsheet_sources
+          depends_on:
+            - task_key: initialize_run
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/bronze/sync_cricsheet_sources.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.schema}
+              - --raw-volume-path
+              - ${var.raw_volume_path}
+              - --run-id
+              - "{{job.run_id}}"
+              - --run-mode
+              - ${var.run_mode}
+              - --dry-run
+              - ${var.dry_run}
+
         - task_key: extract_new_zip_files
+          depends_on:
+            - task_key: sync_cricsheet_sources
           environment_key: default
           spark_python_task:
             python_file: ../src/cricket_lakehouse/bronze/extract_new_zip_files.py
@@ -32,6 +77,26 @@ resources:
               - ${var.extract_output_path}
               - --run-id
               - "{{job.run_id}}"
+              - --run-mode
+              - ${var.run_mode}
+              - --dry-run
+              - ${var.dry_run}
+
+        - task_key: ingest_register_files
+          depends_on:
+            - task_key: sync_cricsheet_sources
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/bronze/ingest_register_files.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.schema}
+              - --run-id
+              - "{{job.run_id}}"
+              - --run-mode
+              - ${var.run_mode}
 
         - task_key: bronze_ingest_raw_matches
           depends_on:
@@ -52,6 +117,8 @@ resources:
               - "{{job.run_id}}"
               - --incremental
               - "true"
+              - --run-mode
+              - ${var.run_mode}
 
         - task_key: all_silver_build_matches
           depends_on:
@@ -89,10 +156,47 @@ resources:
               - --incremental
               - "true"
 
+        - task_key: resolve_people_and_dimensions
+          depends_on:
+            - task_key: bronze_ingest_raw_matches
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/silver/resolve_people_and_dimensions.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.schema}
+              - --run-id
+              - "{{job.run_id}}"
+              - --run-mode
+              - ${var.run_mode}
+
+        - task_key: validate_silver
+          depends_on:
+            - task_key: all_silver_build_matches
+            - task_key: all_silver_build_deliveries
+            - task_key: resolve_people_and_dimensions
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/common/validate_pipeline.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.schema}
+              - --run-id
+              - "{{job.run_id}}"
+              - --run-mode
+              - ${var.run_mode}
+              - --layer
+              - silver
+
         - task_key: all_gold_build_analytics
           depends_on:
             - task_key: all_silver_build_matches
             - task_key: all_silver_build_deliveries
+            - task_key: validate_silver
           environment_key: default
           spark_python_task:
             python_file: ../src/cricket_lakehouse/gold/build_analytics.py
@@ -191,10 +295,68 @@ resources:
               - --target-leagues
               - ${var.target_leagues}
 
+        - task_key: build_ai_serving_tables
+          depends_on:
+            - task_key: all_gold_build_analytics
+            - task_key: resolve_people_and_dimensions
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/gold/build_ai_serving.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --source-schema
+              - ${var.schema}
+              - --target-schema
+              - ${var.showcase_schema}
+              - --focus-leagues
+              - ${var.target_leagues}
+              - --run-id
+              - "{{job.run_id}}"
+              - --run-mode
+              - ${var.run_mode}
+
+        - task_key: validate_gold_and_serving
+          depends_on:
+            - task_key: build_league_segment_tables
+            - task_key: build_ai_serving_tables
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/common/validate_pipeline.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.schema}
+              - --serving-schema
+              - ${var.showcase_schema}
+              - --run-id
+              - "{{job.run_id}}"
+              - --run-mode
+              - ${var.run_mode}
+              - --layer
+              - gold
+
+        - task_key: finalize_run_summary
+          depends_on:
+            - task_key: validate_gold_and_serving
+          run_if: ALL_DONE
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/cricket_lakehouse/common/finalize_run.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.schema}
+              - --run-id
+              - "{{job.run_id}}"
+              - --run-mode
+              - ${var.run_mode}
+
         - task_key: notify_run_summary
           depends_on:
-            - task_key: cricinsights_gold_build_analytics
-            - task_key: build_league_segment_tables
+            - task_key: finalize_run_summary
           run_if: ALL_DONE
           environment_key: default
           spark_python_task:

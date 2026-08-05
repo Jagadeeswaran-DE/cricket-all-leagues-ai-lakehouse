@@ -13,6 +13,10 @@ variables:
     description: Unity Catalog schema for cricket lakehouse tables.
     default: cricket_all
 
+  primary_schema:
+    description: Primary all-leagues schema; alias retained for existing deployments.
+    default: cricket_all
+
   showcase_schema:
     description: Unity Catalog schema for the focused AI showcase tables.
     default: cricinsights_src2
@@ -23,7 +27,7 @@ variables:
 
   zip_source_path:
     description: ZIP landing path in a Unity Catalog volume.
-    default: /Volumes/cricket/cricket_all/cricket_all_raw/zips/*.zip
+    default: /Volumes/cricket/cricket_all/cricket_all_raw/zips/**/*.zip
 
   zip_arrival_trigger_path:
     description: Directory monitored for new ZIP arrivals.
@@ -33,13 +37,29 @@ variables:
     description: Extracted JSON output directory in a Unity Catalog volume.
     default: /Volumes/cricket/cricket_all/cricket_all_raw/extracted
 
+  raw_volume_path:
+    description: Root Unity Catalog volume for source files, manifests, and checkpoints.
+    default: /Volumes/cricket/cricket_all/cricket_all_raw
+
+  checkpoint_path:
+    description: Checkpoint directory for source sync and future streaming state.
+    default: /Volumes/cricket/cricket_all/cricket_all_raw/checkpoints
+
+  run_mode:
+    description: Pipeline execution mode; incremental is trigger-safe, bootstrap performs a first load.
+    default: incremental
+
+  dry_run:
+    description: Validate source discovery and manifests without writing extracted data.
+    default: "false"
+
   table_prefix:
     description: Optional prefix for output table names, useful for smoke tests.
     default: ""
 
   target_leagues:
     description: Comma-separated Cricsheet event names for the focused AI showcase.
-    default: "Indian Premier League,Big Bash League,Women's Big Bash League,The Hundred Men's Competition,The Hundred Women's Competition"
+    default: "Indian Premier League,Big Bash League,Women's Big Bash League,The Hundred,Women's Premier League,Pakistan Super League,Caribbean Premier League,Major League Cricket,International League T20,SA20"
 
   summary_email_enabled:
     description: Set to true after SMTP secrets are configured.

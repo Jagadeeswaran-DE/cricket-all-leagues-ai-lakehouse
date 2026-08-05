@@ -1,0 +1,8 @@
+catalog: cricket
+primary_schema: cricket_all
+serving_schema: cricinsights_src2
+raw_volume_path: /Volumes/cricket/cricket_all/cricket_all_raw
+run_mode: incremental
+dry_run: false
+notification_enabled: false
+secret_scope: cricket-pipeline

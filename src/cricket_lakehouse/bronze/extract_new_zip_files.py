@@ -4,40 +4,22 @@ import argparse
 import glob
 import os
 import posixpath
+import shutil
+import sys
+import tempfile
 import zipfile
 from datetime import UTC, datetime
 
+_script_file = globals().get("__file__") or globals().get("filename") or (sys.argv[0] if sys.argv else "")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_script_file)))))
+
 from pyspark.sql import SparkSession
-from pyspark.sql.types import LongType, StringType, StructField, StructType, TimestampType
 
-DEFAULT_ZIP_SOURCE_PATH = "/Volumes/cricket/cricket_all/cricket_all_raw/zips/*.zip"
+from cricket_lakehouse.common.audit import append_audit_row, table_name
+from cricket_lakehouse.common.hash_utils import sha256_file
+
+DEFAULT_ZIP_SOURCE_PATH = "/Volumes/cricket/cricket_all/cricket_all_raw/zips/**/*.zip"
 DEFAULT_EXTRACTED_PATH = "/Volumes/cricket/cricket_all/cricket_all_raw/extracted"
-
-
-ZIP_MANIFEST_SCHEMA = StructType(
-    [
-        StructField("run_id", StringType(), False),
-        StructField("zip_path", StringType(), False),
-        StructField("zip_name", StringType(), False),
-        StructField("zip_size_bytes", LongType(), False),
-        StructField("zip_modified_at", TimestampType(), True),
-        StructField("status", StringType(), False),
-        StructField("extracted_json_files", LongType(), False),
-        StructField("processed_at", TimestampType(), False),
-        StructField("error_message", StringType(), True),
-    ]
-)
-
-FILE_MANIFEST_SCHEMA = StructType(
-    [
-        StructField("run_id", StringType(), False),
-        StructField("zip_path", StringType(), False),
-        StructField("match_id", StringType(), False),
-        StructField("extracted_path", StringType(), False),
-        StructField("status", StringType(), False),
-        StructField("processed_at", TimestampType(), False),
-    ]
-)
 
 
 def parse_args() -> argparse.Namespace:
@@ -47,140 +29,98 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--zip-source-path", default=DEFAULT_ZIP_SOURCE_PATH)
     parser.add_argument("--extract-output-path", default=DEFAULT_EXTRACTED_PATH)
     parser.add_argument("--run-id", default="manual")
+    parser.add_argument("--run-mode", default="incremental")
+    parser.add_argument("--dry-run", default="false")
     return parser.parse_args()
 
 
-def table_name(args: argparse.Namespace, name: str) -> str:
-    return f"{args.catalog}.{args.schema}.{name}"
-
-
-def table_exists(spark: SparkSession, name: str) -> bool:
-    try:
-        return spark.catalog.tableExists(name)
-    except Exception:  # noqa: BLE001 - Spark raises different catalog exceptions by runtime.
-        return False
-
-
-def processed_zip_keys(spark: SparkSession, manifest_table: str) -> set[tuple[str, int, int]]:
-    if not table_exists(spark, manifest_table):
-        return set()
-
-    rows = (
-        spark.table(manifest_table)
-        .where("status = 'extracted'")
-        .select("zip_path", "zip_size_bytes", "zip_modified_at")
-        .collect()
-    )
-    keys: set[tuple[str, int, int]] = set()
-    for row in rows:
-        modified_epoch = int(row.zip_modified_at.timestamp()) if row.zip_modified_at else 0
-        keys.add((row.zip_path, int(row.zip_size_bytes), modified_epoch))
-    return keys
-
-
-def safe_extract_name(member_name: str) -> str | None:
+def safe_member_path(member_name: str) -> str | None:
     normalized = posixpath.normpath(member_name.replace("\\", "/"))
-    if normalized.startswith(("../", "/")) or normalized == ".":
+    if normalized in {"", ".", ".."} or normalized.startswith(("/", "../")):
         return None
-    if not normalized.lower().endswith(".json"):
+    if not normalized.lower().endswith((".json", ".csv")):
         return None
-    return posixpath.basename(normalized)
+    return normalized
+
+
+def existing_zip_hashes(spark: SparkSession, manifest: str) -> set[str]:
+    if not spark.catalog.tableExists(manifest):
+        return set()
+    return {row.zip_sha256 for row in spark.table(manifest).where("status = 'extracted'").select("zip_sha256").distinct().collect() if row.zip_sha256}
+
+
+def row_schema():
+    return "run_id string, zip_path string, zip_name string, zip_size_bytes long, zip_modified_at timestamp, zip_sha256 string, source_id string, ingestion_run_id string, status string, extraction_started_at timestamp, extraction_completed_at timestamp, json_file_count long, register_file_count long, invalid_file_count long, error_class string, error_message string, created_at timestamp, updated_at timestamp, extracted_json_files long, processed_at timestamp"
+
+
+def file_schema():
+    return "zip_sha256 string, zip_path string, relative_member_path string, extracted_path string, source_filename string, file_extension string, file_size_bytes long, file_crc long, file_sha256 string, match_id_candidate string, source_revision string, extraction_status string, bronze_ingestion_status string, ingestion_run_id string, created_at timestamp, updated_at timestamp, run_id string, match_id string, status string, processed_at timestamp, error_class string, error_message string"
 
 
 def main() -> None:
     args = parse_args()
     spark = SparkSession.builder.appName("cricket-extract-new-zip-files").getOrCreate()
-    zip_manifest_table = table_name(args, "pipeline_zip_manifest")
-    file_manifest_table = table_name(args, "pipeline_extracted_file_manifest")
-
+    zip_manifest = table_name(args.catalog, args.schema, "pipeline_zip_manifest")
+    file_manifest = table_name(args.catalog, args.schema, "pipeline_extracted_file_manifest")
     os.makedirs(args.extract_output_path, exist_ok=True)
-    already_processed = processed_zip_keys(spark, zip_manifest_table)
-    zip_manifest_rows = []
-    file_manifest_rows = []
+    processed_hashes = existing_zip_hashes(spark, zip_manifest)
+    zip_rows, file_rows = [], []
+    failed = 0
 
-    for zip_path in sorted(glob.glob(args.zip_source_path)):
-        processed_at = datetime.now(UTC)
-        zip_stat = os.stat(zip_path)
-        zip_modified_at = datetime.fromtimestamp(zip_stat.st_mtime, UTC)
-        zip_key = (zip_path, int(zip_stat.st_size), int(zip_stat.st_mtime))
-
-        if zip_key in already_processed:
-            zip_manifest_rows.append(
-                (
-                    args.run_id,
-                    zip_path,
-                    os.path.basename(zip_path),
-                    int(zip_stat.st_size),
-                    zip_modified_at,
-                    "skipped_already_processed",
-                    0,
-                    processed_at,
-                    None,
-                )
-            )
+    for zip_path in sorted(glob.glob(args.zip_source_path, recursive=True)):
+        if not os.path.isfile(zip_path):
+            continue
+        stat = os.stat(zip_path)
+        modified = datetime.fromtimestamp(stat.st_mtime, UTC)
+        started = datetime.now(UTC)
+        checksum = sha256_file(zip_path)
+        if checksum in processed_hashes:
+            zip_rows.append((args.run_id, zip_path, os.path.basename(zip_path), stat.st_size, modified, checksum, None, args.run_id, "skipped_already_processed", started, started, 0, 0, 0, None, None, started, started, 0, started))
             continue
 
-        extracted_count = 0
+        json_count = register_count = invalid_count = 0
+        temp_dir = tempfile.mkdtemp(prefix="cricket_extract_", dir=args.extract_output_path)
         try:
-            with zipfile.ZipFile(zip_path) as archive:
-                for member in archive.infolist():
-                    file_name = safe_extract_name(member.filename)
-                    if file_name is None:
-                        continue
+            if args.dry_run.lower() != "true":
+                with zipfile.ZipFile(zip_path) as archive:
+                    for member in archive.infolist():
+                        relative = safe_member_path(member.filename)
+                        if relative is None:
+                            if member.filename.lower().endswith((".json", ".csv")):
+                                invalid_count += 1
+                            continue
+                        output_name = os.path.basename(relative)
+                        candidate = os.path.join(temp_dir, output_name)
+                        with archive.open(member) as source, open(candidate, "wb") as target:
+                            shutil.copyfileobj(source, target, length=1024 * 1024)
+                        file_hash = sha256_file(candidate)
+                        final_name = output_name
+                        final_path = os.path.join(args.extract_output_path, final_name)
+                        if os.path.exists(final_path) and sha256_file(final_path) != file_hash:
+                            final_name = f"{os.path.splitext(output_name)[0]}__{file_hash[:12]}{os.path.splitext(output_name)[1]}"
+                            final_path = os.path.join(args.extract_output_path, final_name)
+                        os.replace(candidate, final_path)
+                        extension = os.path.splitext(final_name)[1].lower()
+                        match_candidate = os.path.splitext(output_name)[0] if extension == ".json" else None
+                        file_rows.append((checksum, zip_path, relative, final_path, os.path.basename(final_name), extension, member.file_size, member.CRC, file_hash, match_candidate, file_hash, "extracted", "pending", args.run_id, started, datetime.now(UTC), args.run_id, match_candidate, "extracted", datetime.now(UTC), None, None))
+                        json_count += extension == ".json"
+                        register_count += extension == ".csv"
+            completed = datetime.now(UTC)
+            zip_rows.append((args.run_id, zip_path, os.path.basename(zip_path), stat.st_size, modified, checksum, None, args.run_id, "dry_run" if args.dry_run.lower() == "true" else "extracted", started, completed, json_count, register_count, invalid_count, None, None, started, completed, json_count, completed))
+        except (OSError, RuntimeError, zipfile.BadZipFile, ValueError) as error:
+            failed += 1
+            completed = datetime.now(UTC)
+            zip_rows.append((args.run_id, zip_path, os.path.basename(zip_path), stat.st_size, modified, checksum, None, args.run_id, "failed", started, completed, json_count, register_count, invalid_count, type(error).__name__, str(error), started, completed, json_count, completed))
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
-                    output_path = os.path.join(args.extract_output_path, file_name)
-                    match_id = os.path.splitext(file_name)[0]
-                    if os.path.exists(output_path):
-                        file_manifest_rows.append(
-                            (args.run_id, zip_path, match_id, output_path, "skipped_file_exists", processed_at)
-                        )
-                        continue
-
-                    with archive.open(member) as source, open(output_path, "wb") as target:
-                        target.write(source.read())
-                    extracted_count += 1
-                    file_manifest_rows.append(
-                        (args.run_id, zip_path, match_id, output_path, "extracted", processed_at)
-                    )
-
-            zip_manifest_rows.append(
-                (
-                    args.run_id,
-                    zip_path,
-                    os.path.basename(zip_path),
-                    int(zip_stat.st_size),
-                    zip_modified_at,
-                    "extracted",
-                    extracted_count,
-                    processed_at,
-                    None,
-                )
-            )
-        except (OSError, RuntimeError, zipfile.BadZipFile) as error:
-            zip_manifest_rows.append(
-                (
-                    args.run_id,
-                    zip_path,
-                    os.path.basename(zip_path),
-                    int(zip_stat.st_size),
-                    zip_modified_at,
-                    "failed",
-                    extracted_count,
-                    processed_at,
-                    str(error),
-                )
-            )
-
-    spark.createDataFrame(zip_manifest_rows, ZIP_MANIFEST_SCHEMA).write.format("delta").mode(
-        "append"
-    ).saveAsTable(zip_manifest_table)
-    spark.createDataFrame(file_manifest_rows, FILE_MANIFEST_SCHEMA).write.format("delta").mode(
-        "append"
-    ).saveAsTable(file_manifest_table)
-
-    failed_count = sum(1 for row in zip_manifest_rows if row[5] == "failed")
-    if failed_count:
-        raise RuntimeError(f"{failed_count} zip file(s) failed extraction")
+    if zip_rows:
+        spark.createDataFrame(zip_rows, row_schema()).write.format("delta").option("mergeSchema", "true").mode("append").saveAsTable(zip_manifest)
+    if file_rows:
+        spark.createDataFrame(file_rows, file_schema()).write.format("delta").option("mergeSchema", "true").mode("append").saveAsTable(file_manifest)
+    append_audit_row(spark, args.catalog, args.schema, args.run_id, "extract_new_zip_files", "FAILED" if failed else "SUCCEEDED", len(zip_rows), sum(row[11] for row in zip_rows), sum(row[11] for row in zip_rows), skipped_count=sum(row[11] == 0 for row in zip_rows), quarantine_count=sum(row[13] for row in zip_rows), run_mode=args.run_mode)
+    if failed:
+        raise RuntimeError(f"{failed} ZIP file(s) failed extraction")
 
 
 if __name__ == "__main__":

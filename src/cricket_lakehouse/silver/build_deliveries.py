@@ -9,6 +9,7 @@ from pyspark.sql.functions import (
     explode_outer,
     from_json,
     lit,
+    lower,
     posexplode_outer,
     when,
 )
@@ -81,12 +82,9 @@ def target_leagues(args: argparse.Namespace) -> list[str]:
 
 def league_group_expr() -> object:
     return (
-        when(col("league_name") == "Indian Premier League", lit("IPL"))
-        .when(col("league_name").isin("Big Bash League", "Women's Big Bash League"), lit("Big Bash"))
-        .when(
-            col("league_name").isin("The Hundred Men's Competition", "The Hundred Women's Competition"),
-            lit("The Hundred"),
-        )
+        when(lower(col("league_name")).contains("indian premier league"), lit("IPL"))
+        .when(lower(col("league_name")).contains("big bash"), lit("Big Bash"))
+        .when(lower(col("league_name")).contains("the hundred"), lit("The Hundred"))
         .otherwise(col("league_name"))
     )
 
@@ -167,6 +165,8 @@ def main() -> None:
         "batting_team",
         "over_number",
         "delivery_index",
+        (col("innings_index") + 1).alias("innings_number"),
+        (col("delivery_index") + 1).alias("delivery_sequence"),
         col("delivery.actual_delivery").alias("actual_delivery"),
         col("delivery.batter").alias("batter"),
         col("delivery.bowler").alias("bowler"),
@@ -221,13 +221,15 @@ def main() -> None:
     deliveries_table = table_name(args, "silver_deliveries")
     wickets_table = table_name(args, "silver_wickets")
 
-    if incremental and table_exists(spark, deliveries_table):
-        existing_matches = spark.table(deliveries_table).select("match_id").distinct()
-        deliveries = deliveries.join(existing_matches, ["match_id"], "left_anti")
-        wickets = wickets.join(existing_matches, ["match_id"], "left_anti")
-
     if deliveries.select("match_id").limit(1).count() == 0:
         return
+
+    if incremental and table_exists(spark, deliveries_table):
+        deliveries.createOrReplaceTempView("cricket_silver_delivery_batch")
+        spark.sql(f"DELETE FROM {deliveries_table} WHERE EXISTS (SELECT 1 FROM cricket_silver_delivery_batch b WHERE {deliveries_table}.match_id = b.match_id)")
+        wickets.createOrReplaceTempView("cricket_silver_wicket_batch")
+        if table_exists(spark, wickets_table):
+            spark.sql(f"DELETE FROM {wickets_table} WHERE EXISTS (SELECT 1 FROM cricket_silver_wicket_batch b WHERE {wickets_table}.match_id = b.match_id)")
 
     write_mode = "append" if incremental else "overwrite"
     deliveries_writer = deliveries.write.format("delta").mode(write_mode)

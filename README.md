@@ -34,6 +34,12 @@ This lakehouse solves that problem in two layers:
 The result is a single source of truth for engineering and analytics, with a
 purpose-built serving layer for interactive AI workloads.
 
+The production extension, source acquisition design, revision semantics, DQ
+contract, task graph, migration order, and data dictionary are documented in
+[`docs/production_extension.md`](docs/production_extension.md),
+[`docs/cleanup_report.md`](docs/cleanup_report.md), and
+[`docs/data_dictionary.md`](docs/data_dictionary.md).
+
 ## Source Data and Storage
 
 The source is stored in a Unity Catalog Volume:
@@ -208,6 +214,18 @@ silver/gold, league segmentation, and notification tasks.
 
 New ZIP uploads trigger this job automatically after the configured quiet
 period when its file-arrival trigger is unpaused.
+
+The same job supports an explicit bootstrap and a dry run:
+
+```powershell
+databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile jagadeeswaran --var run_mode=bootstrap
+databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile jagadeeswaran --var dry_run=true
+```
+
+Bootstrap creates operational tables and source directories, downloads the
+official archive/register sources, and builds the same Bronze/Silver/Gold path.
+Incremental mode skips the full archive refresh and consumes only newly landed
+or revised input.
 
 The notification task runs with `ALL_DONE`, so a failed upstream task can still
 produce an operational summary describing what completed and what failed.
