@@ -200,20 +200,7 @@ available for analysis.
 
 ## Jobs and Orchestration
 
-### Full lakehouse job
-
-`cricket_all_leagues_lakehouse_job` builds the complete all-leagues medallion
-layers. It is useful for an initial load, a full rebuild, or validation after a
-major transformation change.
-
-### Optional AI showcase job
-
-`cricket_showcase_ai_lakehouse_job` reuses the all-leagues bronze table and
-rebuilds only the competitions configured in `target_leagues` in the serving
-schema. It is useful for a chatbot proof of concept, such as an IPL-only
-assistant, without changing the complete all-leagues foundation.
-
-### Production incremental ZIP job
+### Main incremental ZIP job
 
 `cricket_incremental_zip_pipeline_job` is the operational job. It coordinates
 extraction, manifests, all-leagues bronze/silver/gold, optional filtered
@@ -361,22 +348,10 @@ Deploy it:
 databricks bundle deploy -t dev --profile jagadeeswaran
 ```
 
-Run the full lakehouse job:
-
-```powershell
-databricks bundle run cricket_all_leagues_lakehouse_job -t dev --profile jagadeeswaran
-```
-
 Run the incremental ZIP pipeline:
 
 ```powershell
 databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile jagadeeswaran
-```
-
-Run the optional AI showcase job:
-
-```powershell
-databricks bundle run cricket_showcase_ai_lakehouse_job -t dev --profile jagadeeswaran
 ```
 
 Run local checks:

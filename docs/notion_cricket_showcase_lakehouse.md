@@ -74,11 +74,15 @@ Deploy:
 databricks bundle deploy -t dev --profile jagadeeswaran
 ```
 
-Run showcase pipeline:
+Run the main incremental pipeline, which now includes the optional serving
+layer:
 
 ```powershell
-databricks bundle run cricket_showcase_ai_lakehouse_job -t dev --profile jagadeeswaran
+databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile jagadeeswaran
 ```
+
+The standalone showcase job was retired so the project has one operational
+entry point.
 
 ## Production Run Result
 
