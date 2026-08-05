@@ -428,6 +428,19 @@ catalog, schema, and Volume names. The bundle creates the Delta tables and
 operational metadata, but the user must have permission to create or use the
 catalog, schema, Volume, serverless job, and Databricks Secret scope.
 
+### Databricks Free Edition is enough
+
+Databricks Free Edition is sufficient for learning, portfolio demonstration,
+and a small test run of this project. It provides Unity Catalog and serverless
+compute, which match this bundle's serverless job design. Free Edition is
+quota-limited and has no production SLA; the complete 22K-file bootstrap may
+take longer than a paid workspace. Its outbound internet access is restricted,
+so if the job cannot reach Cricsheet, download the archive/register files on
+your computer and upload them into the configured Volume instead.
+
+See the official [Free Edition overview](https://docs.databricks.com/aws/en/getting-started/free-edition)
+and [Free Edition limitations](https://docs.databricks.com/aws/en/getting-started/free-edition-limitations).
+
 ### 1. Prerequisites
 
 - A Databricks workspace with Unity Catalog and serverless jobs enabled.
@@ -440,10 +453,30 @@ catalog, schema, Volume, serverless job, and Databricks Secret scope.
 ```powershell
 git clone https://github.com/Jagadeeswaran-DE/cricket-all-leagues-ai-lakehouse.git
 Set-Location cricket-all-leagues-ai-lakehouse
+```
+
+Install the Databricks CLI on Windows:
+
+```powershell
+winget search databricks
+winget install Databricks.DatabricksCLI
+databricks version
+```
+
+The CLI must be version `0.205.0` or newer. Then connect it to the workspace
+using browser-based OAuth:
+
+```powershell
 
 databricks auth login --host https://<WORKSPACE_HOST> --profile <PROFILE>
 databricks auth profiles
+databricks current-user me --profile <PROFILE>
 ```
+
+For macOS/Linux installation options, see the official
+[Databricks CLI installation guide](https://docs.databricks.com/aws/en/dev-tools/cli/install).
+The authentication flow is described in the official
+[CLI authentication guide](https://docs.databricks.com/aws/en/dev-tools/cli/authentication).
 
 ### 3. Prepare Unity Catalog storage
 
@@ -488,6 +521,9 @@ databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile <PRO
 
 Bootstrap downloads the official `all_json.zip`, `people.csv`, and `names.csv`,
 extracts the archive, and builds Bronze, Silver, Gold, and AI serving tables.
+The `databricks bundle deploy` command creates the one multi-task serverless
+Databricks job from `resources/cricket_incremental_zip_pipeline_job.yml`; no job
+needs to be created manually in the Databricks UI.
 
 ### 6. Enable daily operation
 
@@ -504,6 +540,24 @@ sources, downloads only changed files, processes new ZIPs, and refreshes the
 downstream tables. No manual ZIP upload is required for the official archive.
 
 ### 7. Configure Google Chat notifications
+
+#### Create the Google Chat webhook
+
+Use a Google Workspace account that is allowed to manage webhooks. Personal
+`@gmail.com` accounts generally cannot create incoming webhooks. In Google
+Chat on a desktop browser:
+
+1. Open or create the space for pipeline alerts.
+2. Open the space menu and choose **Apps & integrations**.
+3. Choose **Add webhooks**.
+4. Enter a name such as `Cricket Lakehouse Alerts` and save it.
+5. Open the webhook menu, choose **Copy link**, and keep the URL private.
+
+Google documents the same process in [Build a Google Chat app as a webhook](https://developers.google.com/workspace/chat/quickstart/webhooks).
+The webhook is one-way: it sends alerts to that specific space and does not
+provide an interactive chatbot conversation.
+
+#### Store the webhook securely
 
 Store the webhook in a Databricks Secret. Never commit the webhook URL:
 
@@ -523,6 +577,10 @@ databricks bundle deploy -t dev --profile <PROFILE> `
   --var google_chat_webhook_secret_scope=cricket-pipeline `
   --var google_chat_webhook_secret_key=google-chat-webhook-url
 ```
+
+The job's final notification task builds a plain-text summary, writes it to
+`pipeline_run_summaries`, and sends it as an HTTP `POST` body with a `text`
+field to the secret-backed webhook URL.
 
 ### 8. Verify the result
 

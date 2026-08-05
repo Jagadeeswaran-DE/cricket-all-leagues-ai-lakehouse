@@ -49,11 +49,15 @@ def main() -> None:
     candidates = spark.table(manifest).where("(file_extension = '.json' OR source_filename LIKE '%.json') AND extraction_status = 'extracted'")
     if incremental:
         candidates = candidates.where(col("ingestion_run_id") == args.run_id)
-    source_paths = candidates.select("extracted_path").distinct()
-    if not source_paths.take(1):
+    source_paths = [
+        row.extracted_path
+        for row in candidates.select("extracted_path").distinct().collect()
+        if row.extracted_path
+    ]
+    if not source_paths:
         append_audit_row(spark, args.catalog, args.schema, args.run_id, "bronze_ingest_raw_matches", "SUCCEEDED", run_mode=args.run_mode)
         return
-    raw = spark.read.format("text").option("wholetext", "true").load(args.source_path if not incremental else source_paths.rdd.map(lambda row: row.extracted_path).collect())
+    raw = spark.read.format("text").option("wholetext", "true").load(args.source_path if not incremental else source_paths)
     raw = raw.withColumnRenamed("value", "raw_json").withColumn("source_path", col("_metadata.file_path"))
     metadata = candidates.select("extracted_path", "zip_path", "zip_sha256", "file_sha256", "source_revision", "match_id_candidate").dropDuplicates(["extracted_path"])
     raw = raw.join(metadata, regexp_replace(raw.source_path, "^file:", "") == metadata.extracted_path, "left").drop("extracted_path")
