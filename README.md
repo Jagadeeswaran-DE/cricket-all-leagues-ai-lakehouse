@@ -285,8 +285,8 @@ The job is scheduled with Quartz expression `0 0 10 * * ?` in the
 The same job supports an explicit bootstrap and a dry run:
 
 ```powershell
-databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile jagadeeswaran --var run_mode=bootstrap
-databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile jagadeeswaran --var dry_run=true
+databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile <PROFILE> --var run_mode=bootstrap
+databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile <PROFILE> --var dry_run=true
 ```
 
 Bootstrap creates operational tables and source directories, downloads the
@@ -420,24 +420,147 @@ The implementation is Python and Spark-based. Databricks Asset Bundles keep
 job definitions, parameters, and environment configuration version-controlled
 alongside the transformation code.
 
+## Use This Repository Yourself
+
+These steps are for a new user who clones this project into a different
+Databricks workspace. Replace the example values with the user's own profile,
+catalog, schema, and Volume names. The bundle creates the Delta tables and
+operational metadata, but the user must have permission to create or use the
+catalog, schema, Volume, serverless job, and Databricks Secret scope.
+
+### 1. Prerequisites
+
+- A Databricks workspace with Unity Catalog and serverless jobs enabled.
+- Permission to create or use a catalog, schema, and Unity Catalog Volume.
+- Git, the Databricks CLI, and Python/uv for local checks.
+- Network access from the Databricks job to the official Cricsheet download URLs.
+
+### 2. Clone and authenticate
+
+```powershell
+git clone https://github.com/Jagadeeswaran-DE/cricket-all-leagues-ai-lakehouse.git
+Set-Location cricket-all-leagues-ai-lakehouse
+
+databricks auth login --host https://<WORKSPACE_HOST> --profile <PROFILE>
+databricks auth profiles
+```
+
+### 3. Prepare Unity Catalog storage
+
+Run this in a Databricks SQL editor, or use existing governed objects:
+
+```sql
+CREATE CATALOG IF NOT EXISTS <CATALOG>;
+CREATE SCHEMA IF NOT EXISTS <CATALOG>.<SCHEMA>;
+CREATE SCHEMA IF NOT EXISTS <CATALOG>.<SERVING_SCHEMA>;
+CREATE VOLUME IF NOT EXISTS <CATALOG>.<SCHEMA>.cricket_all_raw;
+```
+
+The default paths are:
+
+```text
+/Volumes/cricket/cricket_all/cricket_all_raw/zips/
+/Volumes/cricket/cricket_all/cricket_all_raw/extracted/
+```
+
+For a different catalog or schema, pass matching bundle variables during
+deployment, including `raw_volume_path`, `zip_source_path`,
+`extract_output_path`, and `source_path`.
+
+### 4. Validate the bundle
+
+```powershell
+databricks bundle validate -t dev --profile <PROFILE>
+```
+
+### 5. Run the first bootstrap safely
+
+Pause the schedule while loading the initial archive. Bundle variables are set
+at deployment time, so deploy first and then run the job:
+
+```powershell
+databricks bundle deploy -t dev --profile <PROFILE> `
+  --var run_mode=bootstrap `
+  --var schedule_pause_status=PAUSED
+
+databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile <PROFILE>
+```
+
+Bootstrap downloads the official `all_json.zip`, `people.csv`, and `names.csv`,
+extracts the archive, and builds Bronze, Silver, Gold, and AI serving tables.
+
+### 6. Enable daily operation
+
+After bootstrap succeeds, deploy the same bundle with daily mode enabled:
+
+```powershell
+databricks bundle deploy -t dev --profile <PROFILE> `
+  --var run_mode=daily `
+  --var schedule_pause_status=UNPAUSED
+```
+
+The job then runs every day at 10:00 AM Asia/Kolkata. It checks the official
+sources, downloads only changed files, processes new ZIPs, and refreshes the
+downstream tables. No manual ZIP upload is required for the official archive.
+
+### 7. Configure Google Chat notifications
+
+Store the webhook in a Databricks Secret. Never commit the webhook URL:
+
+```powershell
+databricks secrets create-scope cricket-pipeline --profile <PROFILE>
+databricks secrets put-secret cricket-pipeline google-chat-webhook-url `
+  --string-value "<GOOGLE_CHAT_WEBHOOK_URL>" --profile <PROFILE>
+```
+
+Redeploy with the notification settings:
+
+```powershell
+databricks bundle deploy -t dev --profile <PROFILE> `
+  --var run_mode=daily `
+  --var schedule_pause_status=UNPAUSED `
+  --var google_chat_enabled=true `
+  --var google_chat_webhook_secret_scope=cricket-pipeline `
+  --var google_chat_webhook_secret_key=google-chat-webhook-url
+```
+
+### 8. Verify the result
+
+In Databricks SQL, check the run summary and chatbot tables:
+
+```sql
+SELECT *
+FROM <CATALOG>.<SCHEMA>.pipeline_run_summaries
+ORDER BY recorded_at DESC
+LIMIT 1;
+
+SELECT *
+FROM <CATALOG>.<SERVING_SCHEMA>.gold_ai_match_facts_focus_leagues
+LIMIT 10;
+```
+
+For a manual immediate run, use `databricks bundle run` again. For normal
+operation, leave the daily schedule enabled and monitor the run summary or
+Google Chat notification.
+
 ## Run Locally Against Databricks
 
 Validate the bundle:
 
 ```powershell
-databricks bundle validate -t dev --profile jagadeeswaran
+databricks bundle validate -t dev --profile <PROFILE>
 ```
 
 Deploy it:
 
 ```powershell
-databricks bundle deploy -t dev --profile jagadeeswaran
+databricks bundle deploy -t dev --profile <PROFILE>
 ```
 
 Run the daily ZIP pipeline manually:
 
 ```powershell
-databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile jagadeeswaran
+databricks bundle run cricket_incremental_zip_pipeline_job -t dev --profile <PROFILE>
 ```
 
 Run local checks:

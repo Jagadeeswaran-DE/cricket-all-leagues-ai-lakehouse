@@ -53,6 +53,10 @@ variables:
     description: Validate source discovery and manifests without writing extracted data.
     default: "false"
 
+  schedule_pause_status:
+    description: Databricks schedule state; pause during bootstrap and unpause for daily operation.
+    default: UNPAUSED
+
   table_prefix:
     description: Optional prefix for output table names, useful for smoke tests.
     default: ""
@@ -110,5 +114,4 @@ targets:
     default: true
     mode: development
     workspace:
-      profile: jagadeeswaran
       root_path: /Workspace/Users/${workspace.current_user.userName}/bundles/${bundle.name}/${bundle.target}
