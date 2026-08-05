@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from pyspark.sql import SparkSession
 
-from cricket_lakehouse.common.audit import append_audit_row, table_name
+from cricket_lakehouse.common.audit import append_audit_row, append_progress_row, table_name
 from cricket_lakehouse.common.hash_utils import sha256_file
 
 DEFAULT_ZIP_SOURCE_PATH = "/Volumes/cricket/cricket_all/cricket_all_raw/zips/**/*.zip"
@@ -77,16 +77,30 @@ def main() -> None:
         checksum = sha256_file(zip_path)
         if checksum in processed_hashes:
             print(f"Skipping already processed ZIP: {zip_path}", flush=True)
+            append_progress_row(
+                spark, args.catalog, args.schema, args.run_id, "extract_new_zip_files",
+                zip_path, 0, 0, "SKIPPED", "ZIP checksum already processed",
+            )
             zip_rows.append((args.run_id, zip_path, os.path.basename(zip_path), stat.st_size, modified, checksum, None, args.run_id, "skipped_already_processed", started, started, 0, 0, 0, None, None, started, started, 0, started))
             continue
 
         print(f"Extracting ZIP: {zip_path} ({stat.st_size:,} bytes)", flush=True)
         json_count = register_count = invalid_count = 0
+        total_members = processed_members = 0
         temp_dir = tempfile.mkdtemp(prefix="cricket_extract_", dir=args.extract_output_path)
         try:
             if args.dry_run.lower() != "true":
                 with zipfile.ZipFile(zip_path) as archive:
-                    for member in archive.infolist():
+                    members = archive.infolist()
+                    eligible_members = [member for member in members if safe_member_path(member.filename) is not None]
+                    total_members = len(eligible_members)
+                    processed_members = 0
+                    checkpoint_interval = max(1000, total_members // 20) if total_members else 1
+                    append_progress_row(
+                        spark, args.catalog, args.schema, args.run_id, "extract_new_zip_files",
+                        zip_path, 0, total_members, "RUNNING", "ZIP extraction started",
+                    )
+                    for member in members:
                         relative = safe_member_path(member.filename)
                         if relative is None:
                             if member.filename.lower().endswith((".json", ".csv")):
@@ -108,8 +122,28 @@ def main() -> None:
                         file_rows.append((checksum, zip_path, relative, final_path, os.path.basename(final_name), extension, member.file_size, member.CRC, file_hash, match_candidate, file_hash, "extracted", "pending", args.run_id, started, datetime.now(UTC), args.run_id, match_candidate, "extracted", datetime.now(UTC), None, None))
                         json_count += extension == ".json"
                         register_count += extension == ".csv"
-                        if (json_count + register_count) % 1000 == 0:
-                            print(f"  extracted {json_count:,} JSON and {register_count:,} register files", flush=True)
+                        processed_members += 1
+                        if processed_members % checkpoint_interval == 0 or processed_members == total_members:
+                            percent = processed_members * 100 / total_members if total_members else 100
+                            print(
+                                f"  extraction progress: {processed_members:,}/{total_members:,} "
+                                f"({percent:.1f}%) - {json_count:,} JSON, {register_count:,} register files",
+                                flush=True,
+                            )
+                            append_progress_row(
+                                spark, args.catalog, args.schema, args.run_id, "extract_new_zip_files",
+                                zip_path, processed_members, total_members, "RUNNING",
+                                f"{json_count:,} JSON and {register_count:,} register files",
+                            )
+                    append_progress_row(
+                        spark, args.catalog, args.schema, args.run_id, "extract_new_zip_files",
+                        zip_path, processed_members, total_members, "SUCCEEDED", "ZIP extraction completed",
+                    )
+            else:
+                append_progress_row(
+                    spark, args.catalog, args.schema, args.run_id, "extract_new_zip_files",
+                    zip_path, 0, 0, "SKIPPED", "Dry run; no files extracted",
+                )
             completed = datetime.now(UTC)
             zip_rows.append((args.run_id, zip_path, os.path.basename(zip_path), stat.st_size, modified, checksum, None, args.run_id, "dry_run" if args.dry_run.lower() == "true" else "extracted", started, completed, json_count, register_count, invalid_count, None, None, started, completed, json_count, completed))
             processed_hashes.add(checksum)
@@ -117,6 +151,10 @@ def main() -> None:
         except (OSError, RuntimeError, zipfile.BadZipFile, ValueError) as error:
             failed += 1
             completed = datetime.now(UTC)
+            append_progress_row(
+                spark, args.catalog, args.schema, args.run_id, "extract_new_zip_files",
+                zip_path, processed_members, total_members, "FAILED", str(error),
+            )
             zip_rows.append((args.run_id, zip_path, os.path.basename(zip_path), stat.st_size, modified, checksum, None, args.run_id, "failed", started, completed, json_count, register_count, invalid_count, type(error).__name__, str(error), started, completed, json_count, completed))
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)

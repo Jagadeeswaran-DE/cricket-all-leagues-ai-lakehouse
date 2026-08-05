@@ -88,3 +88,48 @@ def append_audit_row(
         "skipped_count long, quarantine_count long, error_message string, recorded_at timestamp, "
         "started_at timestamp, completed_at timestamp, duration_seconds double",
     ).write.format("delta").mode("append").saveAsTable(target)
+
+
+def append_progress_row(
+    spark: SparkSession,
+    catalog: str,
+    schema: str,
+    run_id: str,
+    task_name: str,
+    current_item: str,
+    processed_count: int,
+    total_count: int,
+    status: str,
+    message: str | None = None,
+) -> None:
+    """Persist a lightweight checkpoint for long-running driver-side tasks."""
+    ensure_schema(spark, catalog, schema)
+    target = table_name(catalog, schema, "pipeline_task_progress")
+    spark.sql(
+        f"""CREATE TABLE IF NOT EXISTS {target} (
+          run_id STRING, task_name STRING, current_item STRING,
+          processed_count BIGINT, total_count BIGINT, percent_complete DOUBLE,
+          status STRING, message STRING, updated_at TIMESTAMP
+        ) USING DELTA"""
+    )
+    percent = 100.0 if total_count <= 0 and status in {"SUCCEEDED", "SKIPPED"} else (
+        min(100.0, processed_count * 100.0 / total_count) if total_count else 0.0
+    )
+    row = [
+        (
+            run_id,
+            task_name,
+            current_item,
+            int(processed_count),
+            int(total_count),
+            percent,
+            status,
+            message,
+            datetime.now(UTC),
+        )
+    ]
+    spark.createDataFrame(
+        row,
+        "run_id string, task_name string, current_item string, processed_count long, "
+        "total_count long, percent_complete double, status string, message string, updated_at timestamp",
+    ).write.format("delta").mode("append").saveAsTable(target)

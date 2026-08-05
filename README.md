@@ -306,6 +306,7 @@ The pipeline writes operational metadata to the all-leagues schema:
 | --- | --- |
 | `cricket.cricket_all.pipeline_zip_manifest` | ZIP-level processing state and idempotency |
 | `cricket.cricket_all.pipeline_extracted_file_manifest` | File-level extraction state |
+| `cricket.cricket_all.pipeline_task_progress` | Live checkpoints for long-running tasks such as ZIP extraction |
 | `cricket.cricket_all.pipeline_task_metrics` | Task-level counts and timings |
 | `cricket.cricket_all.pipeline_run_summaries` | One detailed record per pipeline run |
 | `cricket.cricket_all.pipeline_table_run_counts` | Per-table new, old, and total counts |
@@ -326,6 +327,19 @@ Long reports are split into multiple Google Chat messages so the detailed
 tables remain readable. The final notification runs after the pipeline, so it
 reports completed task durations; a live in-progress warning would require a
 separate monitor job.
+
+While extraction is running, query the latest ZIP checkpoints:
+
+```sql
+SELECT current_item, processed_count, total_count, percent_complete, status, updated_at
+FROM cricket.cricket_all.pipeline_task_progress
+WHERE run_id = '<JOB_RUN_ID>'
+  AND task_name = 'extract_new_zip_files'
+ORDER BY updated_at DESC;
+```
+
+The task output also prints checkpoints such as
+`extraction progress: 5,000/22,000 (22.7%)`.
 
 The table-level section uses this compact operational format:
 

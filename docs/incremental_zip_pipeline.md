@@ -102,6 +102,7 @@ skipped. ZIPs uploaded by users to the same root are processed by the same run.
 
 - `cricket.cricket_all.pipeline_zip_manifest`
 - `cricket.cricket_all.pipeline_extracted_file_manifest`
+- `cricket.cricket_all.pipeline_task_progress`
 - `cricket.cricket_all.pipeline_task_metrics`
 - `cricket.cricket_all.pipeline_run_summaries`
 - `cricket.cricket_all.pipeline_table_run_counts`
@@ -120,6 +121,20 @@ The Google Chat notification includes:
 Because the notification task runs after the pipeline, the slow-task section
 identifies completed slow tasks. Live alerts while a task is still running need
 a separate monitoring job.
+
+### Live extraction progress
+
+`extract_new_zip_files` writes checkpoints to
+`cricket.cricket_all.pipeline_task_progress` and prints the same values to task
+logs. Query the latest values with:
+
+```sql
+SELECT current_item, processed_count, total_count, percent_complete, status, updated_at
+FROM cricket.cricket_all.pipeline_task_progress
+WHERE run_id = '<JOB_RUN_ID>'
+  AND task_name = 'extract_new_zip_files'
+ORDER BY updated_at DESC;
+```
 
 Google Chat and email summaries include a monospaced table:
 

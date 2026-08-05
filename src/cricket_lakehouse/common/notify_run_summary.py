@@ -295,6 +295,32 @@ def file_inventory(spark: SparkSession, args: argparse.Namespace) -> list[tuple[
     return [(label, f"{new:,}", f"{total:,}") for label, new, total in rows]
 
 
+def extraction_progress_rows(spark: SparkSession, args: argparse.Namespace) -> list[tuple[str, ...]]:
+    progress_table = table_name(args, args.all_schema, "pipeline_task_progress")
+    if not table_exists(spark, progress_table):
+        return []
+    latest: dict[str, object] = {}
+    for row in spark.sql(
+        f"""
+        SELECT * FROM {progress_table}
+        WHERE run_id = '{sql_string(args.run_id)}'
+          AND task_name = 'extract_new_zip_files'
+        ORDER BY updated_at
+        """
+    ).collect():
+        latest[row.current_item] = row
+    return [
+        (
+            str(row.current_item).replace("\\", "/").rsplit("/", 1)[-1],
+            f"{int(row.processed_count):,}/{int(row.total_count):,}",
+            f"{float(row.percent_complete):.1f}%",
+            str(row.status),
+            str(row.updated_at)[:19],
+        )
+        for row in latest.values()
+    ]
+
+
 def latest_task_audit_rows(spark: SparkSession, args: argparse.Namespace) -> dict[str, object]:
     audit = table_name(args, args.all_schema, "pipeline_task_audit")
     if not table_exists(spark, audit):
@@ -397,6 +423,7 @@ def build_summary(
     table_count_rows = build_table_count_rows(spark, args)
     source_rows = source_fetch_rows(spark, args)
     inventory_rows = file_inventory(spark, args)
+    progress_rows = extraction_progress_rows(spark, args)
     task_rows = task_status_rows(spark, args)
     slow_rows = slow_task_rows(task_rows)
     task_statuses = {row[2] for row in task_rows}
@@ -417,6 +444,10 @@ def build_summary(
         "2. File arrival: new this run vs total available",
         "```",
         format_table(("file_type", "new_this_run", "total_available"), inventory_rows),
+        "```",
+        "Extraction progress checkpoints:",
+        "```",
+        format_table(("zip", "processed/total", "percent", "status", "updated"), progress_rows),
         "```",
         f"- ZIP files extracted this run: {zip_files_extracted}",
         f"- JSON files extracted this run: {json_files_extracted}",
