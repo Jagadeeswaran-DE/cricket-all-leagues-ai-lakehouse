@@ -25,6 +25,10 @@ variables:
     description: ZIP landing path in a Unity Catalog volume.
     default: /Volumes/cricket/cricket_all/cricket_all_raw/zips/*.zip
 
+  zip_arrival_trigger_path:
+    description: Directory monitored for new ZIP arrivals.
+    default: /Volumes/cricket/cricket_all/cricket_all_raw/zips/
+
   extract_output_path:
     description: Extracted JSON output directory in a Unity Catalog volume.
     default: /Volumes/cricket/cricket_all/cricket_all_raw/extracted

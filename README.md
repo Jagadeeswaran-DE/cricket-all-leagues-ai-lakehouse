@@ -167,6 +167,25 @@ prevents duplicate records when a job is retried or the same archive is
 uploaded again. New data is appended, while affected analytical partitions are
 refreshed so corrected or late-arriving matches can be represented correctly.
 
+### Automatic file-arrival trigger
+
+The incremental job monitors the ZIP landing directory:
+
+```text
+/Volumes/cricket/cricket_all/cricket_all_raw/zips/
+```
+
+It waits 60 seconds after the last file change before starting and limits
+trigger events to one per minute. This allows a batch of uploaded ZIPs to settle
+before one pipeline run processes them together.
+
+The trigger responds to new files, not an overwrite of an existing filename.
+Use a new ZIP name for a new arrival, or run the job manually when replacing an
+existing archive. The current `dev` bundle target pauses automatic triggers
+during deployment, so the trigger must be unpaused in the job's Schedules &
+Triggers settings after a dev deployment. A production-mode target can keep the
+trigger enabled across deployments.
+
 ## All-Leagues Coverage
 
 The primary pipeline retains every league, format, gender, season, venue, team,
@@ -199,6 +218,9 @@ assistant, without changing the complete all-leagues foundation.
 `cricket_incremental_zip_pipeline_job` is the operational job. It coordinates
 extraction, manifests, all-leagues bronze/silver/gold, optional filtered
 silver/gold, league segmentation, and notification tasks.
+
+New ZIP uploads trigger this job automatically after the configured quiet
+period when its file-arrival trigger is unpaused.
 
 The notification task runs with `ALL_DONE`, so a failed upstream task can still
 produce an operational summary describing what completed and what failed.
