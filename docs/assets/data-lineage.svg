@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 430" role="img" aria-labelledby="title desc">
+  <title id="title">Animated cricket data lineage</title>
+  <desc id="desc">Cricsheet archive, uploaded ZIPs, and register data flow through the lakehouse into league-aware AI serving tables.</desc>
+  <style>
+    .background { fill: #0b2026; }
+    .node { fill: #12343c; stroke: #ff3621; stroke-width: 2; }
+    .source { fill: #173f48; stroke: #7d9698; stroke-width: 2; }
+    .label { fill: #f9f7f4; font: 600 17px Arial, sans-serif; text-anchor: middle; }
+    .sub { fill: #c9d4d5; font: 13px Arial, sans-serif; text-anchor: middle; }
+    .line { fill: none; stroke: #7d9698; stroke-width: 3; stroke-linecap: round; }
+    .dot { fill: #ff3621; }
+    .pulse { animation: pulse 2.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+    .pulse:nth-of-type(2) { animation-delay: .35s; }
+    .pulse:nth-of-type(3) { animation-delay: .7s; }
+    .pulse:nth-of-type(4) { animation-delay: 1.05s; }
+    .pulse:nth-of-type(5) { animation-delay: 1.4s; }
+    .pulse:nth-of-type(6) { animation-delay: 1.75s; }
+    @keyframes pulse { 0%, 100% { opacity: .68; } 50% { opacity: 1; } }
+  </style>
+  <rect class="background" width="1600" height="430" rx="16" />
+
+  <path class="line" d="M250 70 C280 105 300 150 330 180" />
+  <path class="line" d="M250 190 H330" />
+  <path class="line" d="M250 310 C280 275 300 235 330 215" />
+  <path class="line" d="M500 195 H570 M740 195 H810 M980 195 H1050" />
+  <path class="line" d="M1220 180 C1260 145 1270 125 1300 125" />
+  <path class="line" d="M1220 210 C1260 245 1270 265 1300 265" />
+  <path class="line" d="M1480 125 C1510 140 1525 170 1540 185 M1480 265 C1510 250 1525 220 1540 205" />
+
+  <g class="pulse">
+    <rect class="source" x="40" y="35" width="210" height="70" rx="10" />
+    <text class="label" x="145" y="67">Cricsheet archive</text>
+    <text class="sub" x="145" y="88">all_json.zip</text>
+  </g>
+  <g class="pulse">
+    <rect class="source" x="40" y="155" width="210" height="70" rx="10" />
+    <text class="label" x="145" y="187">Uploaded ZIPs</text>
+    <text class="sub" x="145" y="208">new or revised files</text>
+  </g>
+  <g class="pulse">
+    <rect class="source" x="40" y="275" width="210" height="70" rx="10" />
+    <text class="label" x="145" y="307">Register data</text>
+    <text class="sub" x="145" y="328">people.csv + names.csv</text>
+  </g>
+  <g class="pulse">
+    <rect class="node" x="330" y="145" width="170" height="100" rx="10" />
+    <text class="label" x="415" y="182">Volume landing</text>
+    <text class="sub" x="415" y="205">download + checksum</text>
+    <text class="sub" x="415" y="224">atomic file move</text>
+  </g>
+  <g class="pulse">
+    <rect class="node" x="570" y="145" width="170" height="100" rx="10" />
+    <text class="label" x="655" y="182">Bronze</text>
+    <text class="sub" x="655" y="205">raw JSON + lineage</text>
+    <text class="sub" x="655" y="224">latest + versions</text>
+  </g>
+  <g class="pulse">
+    <rect class="node" x="810" y="145" width="170" height="100" rx="10" />
+    <text class="label" x="895" y="182">Silver</text>
+    <text class="sub" x="895" y="205">match + ball facts</text>
+    <text class="sub" x="895" y="224">league normalization</text>
+  </g>
+  <g class="pulse">
+    <rect class="node" x="1050" y="145" width="170" height="100" rx="10" />
+    <text class="label" x="1135" y="182">Gold</text>
+    <text class="sub" x="1135" y="205">player + team stats</text>
+    <text class="sub" x="1135" y="224">affected seasons</text>
+  </g>
+  <g class="pulse">
+    <rect class="node" x="1300" y="85" width="180" height="80" rx="10" />
+    <text class="label" x="1390" y="119">Focus leagues</text>
+    <text class="sub" x="1390" y="141">IPL, BBL, or any set</text>
+  </g>
+  <g class="pulse">
+    <rect class="node" x="1300" y="225" width="180" height="80" rx="10" />
+    <text class="label" x="1390" y="259">Other leagues</text>
+    <text class="sub" x="1390" y="281">complete coverage kept</text>
+  </g>
+  <g class="pulse">
+    <rect class="node" x="1540" y="155" width="50" height="80" rx="10" />
+    <text class="label" x="1565" y="188">AI</text>
+    <text class="sub" x="1565" y="210">chat</text>
+  </g>
+
+  <circle class="dot"><animateMotion dur="5s" repeatCount="indefinite" path="M250 70 C280 105 300 150 330 180" /></circle>
+  <circle class="dot"><animateMotion dur="5s" begin="1.5s" repeatCount="indefinite" path="M250 190 H330" /></circle>
+  <circle class="dot"><animateMotion dur="5s" begin="3s" repeatCount="indefinite" path="M250 310 C280 275 300 235 330 215" /></circle>
+  <circle class="dot"><animateMotion dur="5s" begin=".6s" repeatCount="indefinite" path="M500 195 H570 M740 195 H810 M980 195 H1050" /></circle>
+  <circle class="dot"><animateMotion dur="5s" begin="2.2s" repeatCount="indefinite" path="M1220 180 C1260 145 1270 125 1300 125" /></circle>
+  <circle class="dot"><animateMotion dur="5s" begin="3.4s" repeatCount="indefinite" path="M1220 210 C1260 245 1270 265 1300 265" /></circle>
+</svg>

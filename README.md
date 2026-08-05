@@ -98,6 +98,21 @@ flowchart LR
     audit --> notify["Google Chat or SMTP summary"]
 ```
 
+## Animated Data Lineage
+
+The lineage below follows one source record from acquisition to chatbot serving.
+The same path applies to any competition because the league is detected from
+parsed match metadata, normalized in Silver, and routed into the configured
+focus or other-league serving table.
+
+<p align="center">
+  <img src="docs/assets/data-lineage.svg" alt="Animated data lineage from Cricsheet and uploaded ZIPs through Bronze, Silver, Gold, and AI serving" width="100%" />
+</p>
+
+No GitHub plugin or external animation service is required. The visual is a
+repository-local animated SVG, so it travels with the project and renders from
+the README without another account or configuration step.
+
 ## Medallion Layers
 
 ### Bronze: raw and replayable
