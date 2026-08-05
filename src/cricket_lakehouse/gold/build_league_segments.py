@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import os
+import sys
+from datetime import UTC, datetime
+
+_script_file = globals().get("__file__") or globals().get("filename") or (sys.argv[0] if sys.argv else "")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_script_file)))))
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import avg, col, countDistinct, lit, max, round, when
+
+from cricket_lakehouse.common.audit import append_audit_row
 
 
 def parse_args() -> argparse.Namespace:
@@ -12,6 +20,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-schema", default="cricket_all")
     parser.add_argument("--target-schema", default="cricinsights_src2")
     parser.add_argument("--target-leagues", default="")
+    parser.add_argument("--run-id", default="manual")
+    parser.add_argument("--run-mode", default="incremental")
     return parser.parse_args()
 
 
@@ -138,6 +148,7 @@ def build_team_season_cards(spark: SparkSession, args: argparse.Namespace) -> Da
 
 def main() -> None:
     args = parse_args()
+    task_started_at = datetime.now(UTC)
     spark = SparkSession.builder.appName("cricket-gold-build-league-segments").getOrCreate()
     leagues = target_leagues(args)
     if not leagues:
@@ -161,6 +172,20 @@ def main() -> None:
             other,
             table_name(args.catalog, args.target_schema, f"{source_table}_other_leagues"),
         )
+
+    append_audit_row(
+        spark,
+        args.catalog,
+        args.source_schema,
+        args.run_id,
+        "build_league_segment_tables",
+        "SUCCEEDED",
+        len(source_frames),
+        len(source_frames) * 2,
+        len(source_frames) * 2,
+        run_mode=args.run_mode,
+        started_at=task_started_at,
+    )
 
 
 if __name__ == "__main__":

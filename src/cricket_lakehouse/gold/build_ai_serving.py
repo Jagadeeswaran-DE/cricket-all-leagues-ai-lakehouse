@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from datetime import UTC, datetime
 
 _script_file = globals().get("__file__") or globals().get("filename") or (sys.argv[0] if sys.argv else "")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_script_file)))))
@@ -35,6 +36,7 @@ def focus_values(spark: SparkSession, args: argparse.Namespace) -> list[str]:
 
 def main() -> None:
     args = parse_args()
+    task_started_at = datetime.now(UTC)
     spark = SparkSession.builder.appName("cricket-build-ai-serving-tables").getOrCreate()
     focus = focus_values(spark, args)
     outputs = ["gold_ai_match_facts", "gold_ai_player_cards", "gold_ai_team_season_cards"]
@@ -51,7 +53,7 @@ def main() -> None:
         for segment, data in (("focus_leagues", focus_frame), ("other_leagues", other_frame)):
             data.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(table_name(args.catalog, args.target_schema, f"{name}_{segment}"))
             total += data.count()
-    append_audit_row(spark, args.catalog, args.source_schema, args.run_id, "build_ai_serving_tables", "SUCCEEDED", total, total, run_mode=args.run_mode)
+    append_audit_row(spark, args.catalog, args.source_schema, args.run_id, "build_ai_serving_tables", "SUCCEEDED", total, total, run_mode=args.run_mode, started_at=task_started_at)
 
 
 if __name__ == "__main__":

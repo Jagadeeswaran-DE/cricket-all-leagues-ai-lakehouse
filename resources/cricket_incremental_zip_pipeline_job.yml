@@ -273,6 +273,8 @@ resources:
               - ${var.showcase_schema}
               - --table-prefix
               - ""
+              - --audit-schema
+              - ${var.schema}
               - --run-id
               - "{{job.run_id}}"
               - --incremental
@@ -293,6 +295,10 @@ resources:
               - ${var.showcase_schema}
               - --target-leagues
               - ${var.target_leagues}
+              - --run-id
+              - "{{job.run_id}}"
+              - --run-mode
+              - ${var.run_mode}
 
         - task_key: build_ai_serving_tables
           depends_on:

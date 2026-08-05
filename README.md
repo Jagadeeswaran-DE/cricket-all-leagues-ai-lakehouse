@@ -310,7 +310,24 @@ The pipeline writes operational metadata to the all-leagues schema:
 | `cricket.cricket_all.pipeline_run_summaries` | One detailed record per pipeline run |
 | `cricket.cricket_all.pipeline_table_run_counts` | Per-table new, old, and total counts |
 
-Google Chat and SMTP summaries use this compact operational format:
+The Google Chat summary now contains four operational sections:
+
+1. **Source fetch**: source name, source type, downloaded/skipped/failed status,
+   byte count, duration, and an error message when present.
+2. **File arrival**: ZIP, JSON, and CSV counts shown as `new_this_run` versus
+   `total_available`.
+3. **Layer and task status**: Control, Source, Bronze, Silver, Gold, and AI
+   tasks with status, duration, input/output counts, inserts, updates, and
+   completion timestamp.
+4. **Slow tasks**: completed tasks whose recorded duration is greater than 10
+   minutes, followed by the existing table-level counts.
+
+Long reports are split into multiple Google Chat messages so the detailed
+tables remain readable. The final notification runs after the pipeline, so it
+reports completed task durations; a live in-progress warning would require a
+separate monitor job.
+
+The table-level section uses this compact operational format:
 
 ```text
 table_name | new_count | old_count | total_count

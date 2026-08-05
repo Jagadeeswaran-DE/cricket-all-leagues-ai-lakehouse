@@ -71,6 +71,7 @@ def download(url: str, target: str) -> tuple[int, str]:
 
 def main() -> None:
     args = parse_args()
+    task_started_at = datetime.now(UTC)
     spark = SparkSession.builder.appName("cricket-sync-cricsheet-sources").getOrCreate()
     ensure_schema(spark, args.catalog, args.schema)
     manifest = table_name(args.catalog, args.schema, "pipeline_source_manifest")
@@ -108,7 +109,7 @@ def main() -> None:
             source_rows.append((source_id, source["source_name"], source["source_type"], source["source_url"], target, source.get("source_period"), None, None, None, None, "failed", started, now, started, now, args.run_id, type(error).__name__, str(error), started, now))
     if source_rows:
         spark.createDataFrame(source_rows, "source_id string, source_name string, source_type string, source_url string, target_path string, source_period string, etag string, last_modified string, content_length long, sha256 string, download_status string, download_started_at timestamp, download_completed_at timestamp, first_seen_at timestamp, last_seen_at timestamp, ingestion_run_id string, error_class string, error_message string, created_at timestamp, updated_at timestamp").write.format("delta").mode("append").saveAsTable(manifest)
-    append_audit_row(spark, args.catalog, args.schema, args.run_id, "sync_cricsheet_sources", "FAILED" if failures else "SUCCEEDED", len(sources), len(source_rows) - failures, len([r for r in source_rows if r[10] == "downloaded"]), skipped_count=len([r for r in source_rows if r[10] in {"skipped_unchanged", "dry_run"}]), quarantine_count=0, run_mode=args.run_mode)
+    append_audit_row(spark, args.catalog, args.schema, args.run_id, "sync_cricsheet_sources", "FAILED" if failures else "SUCCEEDED", len(sources), len(source_rows) - failures, len([r for r in source_rows if r[10] == "downloaded"]), skipped_count=len([r for r in source_rows if r[10] in {"skipped_unchanged", "dry_run"}]), quarantine_count=0, run_mode=args.run_mode, started_at=task_started_at)
     if failures:
         raise RuntimeError(f"{failures} source download(s) failed")
 

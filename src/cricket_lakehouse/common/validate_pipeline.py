@@ -28,6 +28,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    task_started_at = datetime.now(UTC)
     spark = SparkSession.builder.appName(f"cricket-validate-{args.layer}").getOrCreate()
     checks: list[tuple[str, str, str, int, dict[str, object]]] = []
     deliveries = table_name(args.catalog, args.schema, "silver_deliveries")
@@ -52,7 +53,7 @@ def main() -> None:
     if results:
         spark.createDataFrame(results, "run_id string, check_name string, table_name string, severity string, status string, failed_record_count long, sample_failure_json string, checked_at timestamp").write.format("delta").mode("append").saveAsTable(target)
     critical_failures = sum(1 for row in results if row[3] == "CRITICAL" and row[4] == "FAIL")
-    append_audit_row(spark, args.catalog, args.schema, args.run_id, f"validate_{args.layer}", "FAILED" if critical_failures else "SUCCEEDED", len(checks), len(results), run_mode=args.run_mode)
+    append_audit_row(spark, args.catalog, args.schema, args.run_id, f"validate_{args.layer}", "FAILED" if critical_failures else "SUCCEEDED", len(checks), len(results), run_mode=args.run_mode, started_at=task_started_at)
     if critical_failures:
         raise RuntimeError(f"{critical_failures} critical {args.layer} data quality check(s) failed")
 

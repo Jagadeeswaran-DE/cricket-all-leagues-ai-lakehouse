@@ -3,13 +3,14 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from datetime import UTC, datetime
 
 _script_file = globals().get("__file__") or globals().get("filename") or (sys.argv[0] if sys.argv else "")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_script_file)))))
 
 from pyspark.sql import SparkSession
 
-from cricket_lakehouse.common.audit import ensure_schema, table_name
+from cricket_lakehouse.common.audit import append_audit_row, ensure_schema, table_name
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,7 +32,7 @@ def ensure_operational_tables(spark: SparkSession, catalog: str, schema: str) ->
         "pipeline_source_manifest": "source_id STRING, source_name STRING, source_type STRING, source_url STRING, target_path STRING, source_period STRING, etag STRING, last_modified STRING, content_length BIGINT, sha256 STRING, download_status STRING, download_started_at TIMESTAMP, download_completed_at TIMESTAMP, first_seen_at TIMESTAMP, last_seen_at TIMESTAMP, ingestion_run_id STRING, error_class STRING, error_message STRING, created_at TIMESTAMP, updated_at TIMESTAMP",
         "pipeline_zip_manifest": "run_id STRING, zip_path STRING, zip_name STRING, zip_size_bytes BIGINT, zip_modified_at TIMESTAMP, zip_sha256 STRING, source_id STRING, ingestion_run_id STRING, status STRING, extraction_started_at TIMESTAMP, extraction_completed_at TIMESTAMP, json_file_count BIGINT, register_file_count BIGINT, invalid_file_count BIGINT, error_class STRING, error_message STRING, created_at TIMESTAMP, updated_at TIMESTAMP, extracted_json_files BIGINT, processed_at TIMESTAMP",
         "pipeline_extracted_file_manifest": "zip_sha256 STRING, zip_path STRING, relative_member_path STRING, extracted_path STRING, source_filename STRING, file_extension STRING, file_size_bytes BIGINT, file_crc BIGINT, file_sha256 STRING, match_id_candidate STRING, source_revision STRING, extraction_status STRING, bronze_ingestion_status STRING, ingestion_run_id STRING, created_at TIMESTAMP, updated_at TIMESTAMP, run_id STRING, match_id STRING, status STRING, processed_at TIMESTAMP, error_class STRING, error_message STRING",
-        "pipeline_task_audit": "run_id STRING, task_name STRING, run_mode STRING, status STRING, input_count BIGINT, output_count BIGINT, inserted_count BIGINT, updated_count BIGINT, deleted_count BIGINT, skipped_count BIGINT, quarantine_count BIGINT, error_message STRING, recorded_at TIMESTAMP",
+        "pipeline_task_audit": "run_id STRING, task_name STRING, run_mode STRING, status STRING, input_count BIGINT, output_count BIGINT, inserted_count BIGINT, updated_count BIGINT, deleted_count BIGINT, skipped_count BIGINT, quarantine_count BIGINT, error_message STRING, recorded_at TIMESTAMP, started_at TIMESTAMP, completed_at TIMESTAMP, duration_seconds DOUBLE",
         "pipeline_data_quality_results": "run_id STRING, check_name STRING, table_name STRING, severity STRING, status STRING, failed_record_count BIGINT, sample_failure_json STRING, checked_at TIMESTAMP",
         "pipeline_unresolved_people": "run_id STRING, match_id STRING, person_name STRING, source_role STRING, source_file STRING, recorded_at TIMESTAMP",
         "pipeline_unresolved_competitions": "run_id STRING, event_name STRING, match_id STRING, source_file STRING, recorded_at TIMESTAMP",
@@ -52,6 +53,7 @@ def ensure_columns(spark: SparkSession, target: str, columns: dict[str, str]) ->
 
 def main() -> None:
     args = parse_args()
+    task_started_at = datetime.now(UTC)
     spark = SparkSession.builder.appName("cricket-initialize-run").getOrCreate()
     ensure_operational_tables(spark, args.catalog, args.schema)
     ensure_schema(spark, args.catalog, args.serving_schema)
@@ -74,6 +76,15 @@ def main() -> None:
             "file_sha256": "STRING", "match_id_candidate": "STRING", "source_revision": "STRING",
             "extraction_status": "STRING", "bronze_ingestion_status": "STRING", "ingestion_run_id": "STRING",
             "created_at": "TIMESTAMP", "updated_at": "TIMESTAMP", "error_class": "STRING", "error_message": "STRING",
+        },
+    )
+    ensure_columns(
+        spark,
+        table_name(args.catalog, args.schema, "pipeline_task_audit"),
+        {
+            "started_at": "TIMESTAMP",
+            "completed_at": "TIMESTAMP",
+            "duration_seconds": "DOUBLE",
         },
     )
     ensure_columns(
@@ -103,6 +114,16 @@ def main() -> None:
         os.makedirs(os.path.join(args.raw_volume_path, relative), exist_ok=True)
     context = [(args.run_id, args.run_mode, args.dry_run.lower() == "true", "RUNNING",)]
     spark.createDataFrame(context, "run_id string, run_mode string, dry_run boolean, status string").write.format("delta").mode("append").saveAsTable(table_name(args.catalog, args.schema, "pipeline_run_context"))
+    append_audit_row(
+        spark,
+        args.catalog,
+        args.schema,
+        args.run_id,
+        "initialize_run",
+        "SUCCEEDED",
+        run_mode=args.run_mode,
+        started_at=task_started_at,
+    )
 
 
 if __name__ == "__main__":

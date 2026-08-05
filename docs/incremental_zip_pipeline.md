@@ -108,6 +108,19 @@ skipped. ZIPs uploaded by users to the same root are processed by the same run.
 
 ## Notification Format
 
+The Google Chat notification includes:
+
+- source fetch status for each official source, including bytes and duration;
+- ZIP, JSON, and register-file counts as new in the run versus total available;
+- every Control, Source, Bronze, Silver, Gold, and AI task with status,
+  duration, completion time, and processing counts;
+- a slow-task section for completed tasks taking more than 10 minutes; and
+- table-level `new_count`, `old_count`, and `total_count` values.
+
+Because the notification task runs after the pipeline, the slow-task section
+identifies completed slow tasks. Live alerts while a task is still running need
+a separate monitoring job.
+
 Google Chat and email summaries include a monospaced table:
 
 ```text

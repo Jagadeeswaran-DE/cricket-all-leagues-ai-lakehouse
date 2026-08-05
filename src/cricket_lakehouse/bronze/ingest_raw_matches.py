@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from datetime import UTC, datetime
 
 from pyspark.sql import SparkSession
 
@@ -39,12 +40,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    task_started_at = datetime.now(UTC)
     spark = SparkSession.builder.appName("cricket-bronze-ingest-raw-matches").getOrCreate()
     target = table_name(args.catalog, args.schema, f"{args.table_prefix}bronze_raw_matches")
     manifest = table_name(args.catalog, args.schema, "pipeline_extracted_file_manifest")
     incremental = args.incremental.lower() == "true" and args.run_mode != "bootstrap"
     if not spark.catalog.tableExists(manifest):
-        append_audit_row(spark, args.catalog, args.schema, args.run_id, "bronze_ingest_raw_matches", "SUCCEEDED", run_mode=args.run_mode)
+        append_audit_row(spark, args.catalog, args.schema, args.run_id, "bronze_ingest_raw_matches", "SUCCEEDED", run_mode=args.run_mode, started_at=task_started_at)
         return
     candidates = spark.table(manifest).where("(file_extension = '.json' OR source_filename LIKE '%.json') AND extraction_status = 'extracted'")
     if incremental:
@@ -55,7 +57,7 @@ def main() -> None:
         if row.extracted_path
     ]
     if not source_paths:
-        append_audit_row(spark, args.catalog, args.schema, args.run_id, "bronze_ingest_raw_matches", "SUCCEEDED", run_mode=args.run_mode)
+        append_audit_row(spark, args.catalog, args.schema, args.run_id, "bronze_ingest_raw_matches", "SUCCEEDED", run_mode=args.run_mode, started_at=task_started_at)
         return
     raw = spark.read.format("text").option("wholetext", "true").load(args.source_path if not incremental else source_paths)
     raw = raw.withColumnRenamed("value", "raw_json").withColumn("source_path", col("_metadata.file_path"))
@@ -82,7 +84,7 @@ def main() -> None:
         after = spark.table(target).select("match_id").distinct().count()
         inserted_count = max(0, after - before)
         updated_count = max(0, candidate_count - inserted_count)
-    append_audit_row(spark, args.catalog, args.schema, args.run_id, "bronze_ingest_raw_matches", "SUCCEEDED", candidate_count, candidate_count, inserted_count, updated_count, run_mode=args.run_mode)
+    append_audit_row(spark, args.catalog, args.schema, args.run_id, "bronze_ingest_raw_matches", "SUCCEEDED", candidate_count, candidate_count, inserted_count, updated_count, run_mode=args.run_mode, started_at=task_started_at)
 
 
 if __name__ == "__main__":

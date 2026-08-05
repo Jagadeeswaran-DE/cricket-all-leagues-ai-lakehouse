@@ -1,6 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import os
+import sys
+from datetime import UTC, datetime
+
+_script_file = globals().get("__file__") or globals().get("filename") or (sys.argv[0] if sys.argv else "")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_script_file)))))
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
@@ -15,12 +21,15 @@ from pyspark.sql.functions import (
     when,
 )
 
+from cricket_lakehouse.common.audit import append_audit_row
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--catalog", default="cricket")
     parser.add_argument("--schema", default="cricket_all")
     parser.add_argument("--table-prefix", default="")
+    parser.add_argument("--audit-schema", default="")
     parser.add_argument("--run-id", default="manual")
     parser.add_argument("--incremental", default="false")
     return parser.parse_args()
@@ -74,7 +83,10 @@ def write_delta_table(
 
 def main() -> None:
     args = parse_args()
+    task_started_at = datetime.now(UTC)
     spark = SparkSession.builder.appName("cricket-gold-build-analytics").getOrCreate()
+    task_name = "cricinsights_gold_build_analytics" if args.schema == "cricinsights_src2" else "all_gold_build_analytics"
+    audit_schema = args.audit_schema or args.schema
 
     deliveries = spark.table(full_table_name(args, "silver_deliveries"))
     wickets = spark.table(full_table_name(args, "silver_wickets"))
@@ -84,6 +96,7 @@ def main() -> None:
     affected_seasons: list[str] = []
     if incremental:
         if "pipeline_run_id" not in matches.columns:
+            append_audit_row(spark, args.catalog, audit_schema, args.run_id, task_name, "SUCCEEDED", run_mode="incremental", started_at=task_started_at)
             return
         affected_seasons = [
             row.season
@@ -94,6 +107,7 @@ def main() -> None:
             .collect()
         ]
         if not affected_seasons:
+            append_audit_row(spark, args.catalog, audit_schema, args.run_id, task_name, "SUCCEEDED", run_mode="incremental", started_at=task_started_at)
             return
         deliveries = deliveries.where(col("season").isin(affected_seasons))
         wickets = wickets.where(col("season").isin(affected_seasons))
@@ -234,6 +248,7 @@ def main() -> None:
 
     for output_table, frame in outputs.items():
         write_delta_table(spark, args, output_table, frame, incremental, affected_seasons)
+    append_audit_row(spark, args.catalog, audit_schema, args.run_id, task_name, "SUCCEEDED", matches.count(), len(outputs), len(outputs), run_mode="incremental", started_at=task_started_at)
 
 
 if __name__ == "__main__":

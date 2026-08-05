@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from datetime import UTC, datetime
 
 from pyspark.sql import SparkSession
 
@@ -27,17 +28,18 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    task_started_at = datetime.now(UTC)
     spark = SparkSession.builder.appName("cricket-resolve-people-and-dimensions").getOrCreate()
     bronze_table = table_name(args.catalog, args.schema, "bronze_raw_matches")
     if not spark.catalog.tableExists(bronze_table):
-        append_audit_row(spark, args.catalog, args.schema, args.run_id, "resolve_people_and_dimensions", "SUCCEEDED", run_mode=args.run_mode)
+        append_audit_row(spark, args.catalog, args.schema, args.run_id, "resolve_people_and_dimensions", "SUCCEEDED", run_mode=args.run_mode, started_at=task_started_at)
         return
     bronze = spark.table(bronze_table)
     if args.incremental.lower() == "true":
         bronze = bronze.where(col("pipeline_run_id") == args.run_id)
     parsed = bronze.select("match_id", "source_file", from_json("raw_json", DIMENSION_SCHEMA).alias("record"))
     if not parsed.take(1):
-        append_audit_row(spark, args.catalog, args.schema, args.run_id, "resolve_people_and_dimensions", "SUCCEEDED", run_mode=args.run_mode)
+        append_audit_row(spark, args.catalog, args.schema, args.run_id, "resolve_people_and_dimensions", "SUCCEEDED", run_mode=args.run_mode, started_at=task_started_at)
         return
 
     matches = parsed.select("match_id", "source_file", "record.info.*").withColumn("league_name", col("event.name")).drop("event")
@@ -51,7 +53,7 @@ def main() -> None:
     if spark.catalog.tableExists(table_name(args.catalog, args.schema, "dim_people")):
         unresolved = people.join(spark.table(table_name(args.catalog, args.schema, "dim_people")).select(col("identifier").alias("person_id")).distinct(), "person_id", "left_anti").withColumn("run_id", lit(args.run_id)).withColumn("recorded_at", lit(None).cast("timestamp"))
         unresolved.select("run_id", "match_id", "person_name", "source_role", "source_file", "recorded_at").write.format("delta").option("mergeSchema", "true").mode("append").saveAsTable(table_name(args.catalog, args.schema, "pipeline_unresolved_people"))
-    append_audit_row(spark, args.catalog, args.schema, args.run_id, "resolve_people_and_dimensions", "SUCCEEDED", parsed.count(), matches.count(), people.count(), run_mode=args.run_mode)
+    append_audit_row(spark, args.catalog, args.schema, args.run_id, "resolve_people_and_dimensions", "SUCCEEDED", parsed.count(), matches.count(), people.count(), run_mode=args.run_mode, started_at=task_started_at)
 
 
 if __name__ == "__main__":

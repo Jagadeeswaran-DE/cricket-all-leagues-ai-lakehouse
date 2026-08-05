@@ -59,6 +59,7 @@ def file_schema():
 
 def main() -> None:
     args = parse_args()
+    task_started_at = datetime.now(UTC)
     spark = SparkSession.builder.appName("cricket-extract-new-zip-files").getOrCreate()
     zip_manifest = table_name(args.catalog, args.schema, "pipeline_zip_manifest")
     file_manifest = table_name(args.catalog, args.schema, "pipeline_extracted_file_manifest")
@@ -124,7 +125,7 @@ def main() -> None:
         spark.createDataFrame(zip_rows, row_schema()).write.format("delta").option("mergeSchema", "true").mode("append").saveAsTable(zip_manifest)
     if file_rows:
         spark.createDataFrame(file_rows, file_schema()).write.format("delta").option("mergeSchema", "true").mode("append").saveAsTable(file_manifest)
-    append_audit_row(spark, args.catalog, args.schema, args.run_id, "extract_new_zip_files", "FAILED" if failed else "SUCCEEDED", len(zip_rows), sum(row[11] for row in zip_rows), sum(row[11] for row in zip_rows), skipped_count=sum(row[11] == 0 for row in zip_rows), quarantine_count=sum(row[13] for row in zip_rows), run_mode=args.run_mode)
+    append_audit_row(spark, args.catalog, args.schema, args.run_id, "extract_new_zip_files", "FAILED" if failed else "SUCCEEDED", len(zip_rows), sum(row[11] for row in zip_rows), sum(row[11] for row in zip_rows), skipped_count=sum(row[11] == 0 for row in zip_rows), quarantine_count=sum(row[13] for row in zip_rows), run_mode=args.run_mode, started_at=task_started_at)
     if failed:
         raise RuntimeError(f"{failed} ZIP file(s) failed extraction")
 

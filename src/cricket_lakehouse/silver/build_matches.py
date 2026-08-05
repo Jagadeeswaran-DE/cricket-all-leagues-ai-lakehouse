@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import os
+import sys
+from datetime import UTC, datetime
+
+_script_file = globals().get("__file__") or globals().get("filename") or (sys.argv[0] if sys.argv else "")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_script_file)))))
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, element_at, from_json, lit, lower, sha2, when
+
+from cricket_lakehouse.common.audit import append_audit_row
 
 MATCH_SCHEMA = """
 STRUCT<
@@ -81,11 +89,14 @@ def league_group_expr() -> object:
 
 def main() -> None:
     args = parse_args()
+    task_started_at = datetime.now(UTC)
     spark = SparkSession.builder.appName("cricket-silver-build-matches").getOrCreate()
+    task_name = "cricinsights_silver_build_matches" if args.bronze_schema else "all_silver_build_matches"
 
     incremental = args.incremental.lower() == "true"
     bronze_source = spark.table(prefixed_table_name(args, args.bronze_table_prefix, "bronze_raw_matches"))
     if incremental and "pipeline_run_id" not in bronze_source.columns:
+        append_audit_row(spark, args.catalog, args.bronze_schema or args.schema, args.run_id, task_name, "SUCCEEDED", run_mode="incremental", started_at=task_started_at)
         return
 
     bronze = bronze_source.select(
@@ -133,7 +144,9 @@ def main() -> None:
     ).withColumn("league_group", league_group_expr()).dropDuplicates(["match_id"])
 
     target_table = table_name(args, "silver_matches")
-    if matches.select("match_id").limit(1).count() == 0:
+    match_count = matches.select("match_id").count()
+    if match_count == 0:
+        append_audit_row(spark, args.catalog, args.bronze_schema or args.schema, args.run_id, task_name, "SUCCEEDED", run_mode="incremental", started_at=task_started_at)
         return
 
     if incremental and table_exists(spark, target_table):
@@ -149,6 +162,7 @@ def main() -> None:
     if not table_exists(spark, target_table):
         writer = writer.partitionBy("season")
     writer.saveAsTable(target_table)
+    append_audit_row(spark, args.catalog, args.bronze_schema or args.schema, args.run_id, task_name, "SUCCEEDED", match_count, match_count, match_count, run_mode="incremental", started_at=task_started_at)
 
 
 if __name__ == "__main__":
